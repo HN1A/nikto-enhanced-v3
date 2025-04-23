@@ -1,0 +1,199 @@
+#!/usr/bin/perl
+#
+# Nikto Enhanced v3 - English-Only Interface Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin ensures that all output and interfaces are in English only,
+# removing any non-English language elements from the tool.
+#
+
+use strict;
+
+# Plugin information
+my $id = {
+    name        => "english_only_interface",
+    full_name   => "English-Only Interface",
+    author      => "Enhanced Nikto Project",
+    description => "Ensures all output and interfaces are in English only",
+    version     => "1.0",
+    hooks       => {
+        start       => "english_only_start",
+        cleanup     => "english_only_cleanup",
+        postfetch   => "english_only_postfetch",
+        report      => "english_only_report"
+    },
+    options     => {
+        enabled         => "1",
+        force_english   => "1",
+        translate_output => "1",
+        sanitize_responses => "1"
+    }
+};
+
+# Initialize plugin
+sub english_only_start {
+    my ($mark) = @_;
+    
+    # Print plugin information
+    nikto::nprint("+ English-Only Interface: Plugin loaded");
+    
+    # Set environment variables to force English
+    $ENV{'LANG'} = 'en_US.UTF-8';
+    $ENV{'LANGUAGE'} = 'en_US:en';
+    $ENV{'LC_ALL'} = 'en_US.UTF-8';
+    
+    # Override any language settings in Nikto configuration
+    $mark->{'language'} = 'en';
+    $mark->{'locale'} = 'en_US';
+    
+    # Remove any non-English language files if they exist
+    remove_non_english_files();
+    
+    return $mark;
+}
+
+# Cleanup function
+sub english_only_cleanup {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ English-Only Interface: Cleanup completed");
+    
+    return $mark;
+}
+
+# Post-fetch hook - ensure responses are processed in English
+sub english_only_postfetch {
+    my ($mark, $request, $response, $url, $data) = @_;
+    
+    # Skip if plugin is disabled
+    return ($request, $response, $url, $data) unless $id->{options}->{enabled};
+    
+    # Process response to ensure English-only content is displayed
+    if ($id->{options}->{sanitize_responses} && $response) {
+        $response = sanitize_non_english_content($response);
+    }
+    
+    return ($request, $response, $url, $data);
+}
+
+# Report hook - ensure reports are in English only
+sub english_only_report {
+    my ($mark, $report_data) = @_;
+    
+    # Skip if plugin is disabled
+    return $report_data unless $id->{options}->{enabled};
+    
+    # Ensure report data is in English only
+    if ($id->{options}->{translate_output} && $report_data) {
+        $report_data = ensure_english_output($report_data);
+    }
+    
+    return $report_data;
+}
+
+#######################
+# Utility Functions
+#######################
+
+# Remove any non-English language files
+sub remove_non_english_files {
+    # Check for language directories or files
+    my @lang_dirs = glob("./language/*");
+    foreach my $dir (@lang_dirs) {
+        # Skip English language files
+        next if $dir =~ /\/en$/i || $dir =~ /\/english$/i;
+        
+        # Remove non-English language files
+        if (-d $dir) {
+            nikto::nprint("+ English-Only Interface: Removing non-English language directory: $dir");
+            system("rm -rf $dir") if $id->{options}->{force_english};
+        } elsif (-f $dir) {
+            nikto::nprint("+ English-Only Interface: Removing non-English language file: $dir");
+            unlink($dir) if $id->{options}->{force_english};
+        }
+    }
+    
+    # Check for language-specific plugins
+    my @lang_plugins = glob("./plugins/*_i18n_*.plugin");
+    foreach my $plugin (@lang_plugins) {
+        # Skip English language plugins
+        next if $plugin =~ /_i18n_en\.plugin$/i;
+        
+        # Remove non-English language plugins
+        nikto::nprint("+ English-Only Interface: Removing non-English language plugin: $plugin");
+        unlink($plugin) if $id->{options}->{force_english};
+    }
+    
+    # Check for language-specific templates
+    my @lang_templates = glob("./templates/*_i18n_*.tmpl");
+    foreach my $template (@lang_templates) {
+        # Skip English language templates
+        next if $template =~ /_i18n_en\.tmpl$/i;
+        
+        # Remove non-English language templates
+        nikto::nprint("+ English-Only Interface: Removing non-English language template: $template");
+        unlink($template) if $id->{options}->{force_english};
+    }
+}
+
+# Sanitize non-English content from responses
+sub sanitize_non_english_content {
+    my ($response) = @_;
+    
+    # Extract headers and body
+    my ($headers, $body) = split(/\r\n\r\n/, $response, 2);
+    
+    # Process only if there's a body
+    if ($body) {
+        # Remove content in non-Latin scripts (simplified approach)
+        # This is a basic approach and might not catch all non-English content
+        $body =~ s/[\x{0400}-\x{04FF}]//g;  # Cyrillic
+        $body =~ s/[\x{0600}-\x{06FF}]//g;  # Arabic
+        $body =~ s/[\x{0900}-\x{097F}]//g;  # Devanagari
+        $body =~ s/[\x{3000}-\x{303F}]//g;  # CJK Symbols
+        $body =~ s/[\x{3040}-\x{309F}]//g;  # Hiragana
+        $body =~ s/[\x{30A0}-\x{30FF}]//g;  # Katakana
+        $body =~ s/[\x{3100}-\x{312F}]//g;  # Bopomofo
+        $body =~ s/[\x{3130}-\x{318F}]//g;  # Hangul
+        $body =~ s/[\x{4E00}-\x{9FFF}]//g;  # CJK Unified Ideographs
+        
+        # Remove HTML lang attributes for non-English languages
+        $body =~ s/<html[^>]*lang=["'](?!en)([a-z]{2})["'][^>]*>/<html>/gi;
+        $body =~ s/<meta[^>]*http-equiv=["']content-language["'][^>]*content=["'](?!en)([a-z]{2})["'][^>]*>//gi;
+        
+        # Force Content-Language header to English
+        $headers =~ s/Content-Language:.*?\r\n/Content-Language: en\r\n/i;
+    }
+    
+    # Reassemble response
+    return $body ? "$headers\r\n\r\n$body" : $response;
+}
+
+# Ensure output is in English only
+sub ensure_english_output {
+    my ($data) = @_;
+    
+    # Replace any known non-English messages with English equivalents
+    my %translations = (
+        # Add any known non-English strings that might appear in output
+        'Escaneo completado' => 'Scan completed',
+        'Analyse terminée' => 'Analysis completed',
+        'Sicherheitslücken gefunden' => 'Vulnerabilities found',
+        'Обнаружены уязвимости' => 'Vulnerabilities detected',
+        'スキャン完了' => 'Scan completed',
+        '扫描完成' => 'Scan completed'
+        # Add more translations as needed
+    );
+    
+    # Apply translations
+    foreach my $non_english (keys %translations) {
+        $data =~ s/\Q$non_english\E/$translations{$non_english}/g;
+    }
+    
+    # Set report language to English
+    $data =~ s/<report\s+language=['"](?!en)[^'"]*['"]/<report language="en"/i;
+    
+    return $data;
+}
+
+1;

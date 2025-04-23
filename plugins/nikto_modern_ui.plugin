@@ -1,0 +1,404 @@
+###############################################################################
+#  Copyright (C) 2025 Enhanced Nikto Project
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+###############################################################################
+# PURPOSE:
+# تحسين واجهة المستخدم مع مخططات ألوان متقدمة وتصميم حديث
+###############################################################################
+
+sub nikto_modern_ui_init {
+    my $id = { name        => "modern_ui",
+               full_name   => "Modern UI with Advanced Color Schemes",
+               author      => "Enhanced Nikto Project",
+               description => "تحسين واجهة المستخدم مع مخططات ألوان متقدمة وتصميم حديث",
+               hooks       => {
+                   start => { method => \&nikto_modern_ui_start, weight => 5 },
+                   report => { method => \&nikto_modern_ui_report, weight => 5 },
+                   scan => { method => \&nikto_modern_ui_scan, weight => 5 }
+               },
+               copyright => "2025 Enhanced Nikto Project"
+               };
+    return $id;
+}
+
+sub nikto_modern_ui_start {
+    my ($mark) = @_;
+    
+    # تحديد ما إذا كان الطرفية تدعم الألوان
+    $mark->{'supports_color'} = 1;
+    $mark->{'use_colors'} = 1;
+    
+    # تعيين مخطط الألوان الافتراضي
+    $mark->{'color_scheme'} = 'cyber';
+    
+    # تحميل مخططات الألوان
+    %COLOR_SCHEMES = (
+        'cyber' => {
+            'title'     => "\033[38;5;51m",   # سماوي فاتح
+            'heading'   => "\033[38;5;39m",   # أزرق فاتح
+            'info'      => "\033[38;5;245m",  # رمادي
+            'normal'    => "\033[38;5;252m",  # أبيض فاتح
+            'warning'   => "\033[38;5;214m",  # برتقالي
+            'error'     => "\033[38;5;196m",  # أحمر
+            'success'   => "\033[38;5;46m",   # أخضر فاتح
+            'highlight' => "\033[38;5;201m",  # وردي
+            'reset'     => "\033[0m",
+            'bold'      => "\033[1m",
+            'underline' => "\033[4m",
+            'blink'     => "\033[5m",
+            'bg_black'  => "\033[40m",
+            'bg_blue'   => "\033[44m"
+        },
+        'desert' => {
+            'title'     => "\033[38;5;208m",  # برتقالي
+            'heading'   => "\033[38;5;172m",  # بني فاتح
+            'info'      => "\033[38;5;245m",  # رمادي
+            'normal'    => "\033[38;5;223m",  # بيج
+            'warning'   => "\033[38;5;214m",  # برتقالي
+            'error'     => "\033[38;5;160m",  # أحمر داكن
+            'success'   => "\033[38;5;106m",  # أخضر زيتوني
+            'highlight' => "\033[38;5;220m",  # أصفر
+            'reset'     => "\033[0m",
+            'bold'      => "\033[1m",
+            'underline' => "\033[4m",
+            'blink'     => "\033[5m",
+            'bg_black'  => "\033[40m",
+            'bg_brown'  => "\033[43m"
+        },
+        'neon' => {
+            'title'     => "\033[38;5;201m",  # وردي نيون
+            'heading'   => "\033[38;5;199m",  # وردي فاتح
+            'info'      => "\033[38;5;245m",  # رمادي
+            'normal'    => "\033[38;5;159m",  # أزرق فاتح
+            'warning'   => "\033[38;5;226m",  # أصفر
+            'error'     => "\033[38;5;196m",  # أحمر
+            'success'   => "\033[38;5;118m",  # أخضر ليموني
+            'highlight' => "\033[38;5;51m",   # سماوي
+            'reset'     => "\033[0m",
+            'bold'      => "\033[1m",
+            'underline' => "\033[4m",
+            'blink'     => "\033[5m",
+            'bg_black'  => "\033[40m",
+            'bg_purple' => "\033[45m"
+        },
+        'midnight' => {
+            'title'     => "\033[38;5;105m",  # بنفسجي
+            'heading'   => "\033[38;5;68m",   # أزرق متوسط
+            'info'      => "\033[38;5;245m",  # رمادي
+            'normal'    => "\033[38;5;146m",  # رمادي-بنفسجي
+            'warning'   => "\033[38;5;173m",  # بني فاتح
+            'error'     => "\033[38;5;131m",  # أحمر-بني
+            'success'   => "\033[38;5;79m",   # أخضر-أزرق
+            'highlight' => "\033[38;5;147m",  # بنفسجي فاتح
+            'reset'     => "\033[0m",
+            'bold'      => "\033[1m",
+            'underline' => "\033[4m",
+            'blink'     => "\033[5m",
+            'bg_black'  => "\033[40m",
+            'bg_blue'   => "\033[44m"
+        },
+        'blood' => {
+            'title'     => "\033[38;5;196m",  # أحمر
+            'heading'   => "\033[38;5;160m",  # أحمر داكن
+            'info'      => "\033[38;5;245m",  # رمادي
+            'normal'    => "\033[38;5;252m",  # أبيض فاتح
+            'warning'   => "\033[38;5;208m",  # برتقالي
+            'error'     => "\033[38;5;88m",   # أحمر داكن جدًا
+            'success'   => "\033[38;5;40m",   # أخضر
+            'highlight' => "\033[38;5;197m",  # وردي-أحمر
+            'reset'     => "\033[0m",
+            'bold'      => "\033[1m",
+            'underline' => "\033[4m",
+            'blink'     => "\033[5m",
+            'bg_black'  => "\033[40m",
+            'bg_red'    => "\033[41m"
+        }
+    );
+    
+    # عرض رسوم متحركة لبدء التشغيل
+    if ($mark->{'supports_color'} && $mark->{'use_colors'}) {
+        display_animated_banner($mark);
+    }
+    
+    return $mark;
+}
+
+sub display_animated_banner {
+    my ($mark) = @_;
+    my $scheme = $COLOR_SCHEMES{$mark->{'color_scheme'}};
+    
+    # مسح الشاشة
+    print "\033[2J\033[H";
+    
+    # عرض شعار Nikto المحسن مع رسوم متحركة
+    my @logo = (
+        "███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ██╗   ██╗██████╗ ",
+        "████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██║   ██║╚════██╗",
+        "██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    ██║   ██║ █████╔╝",
+        "██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ╚██╗ ██╔╝ ╚═══██╗",
+        "██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝     ╚████╔╝ ██████╔╝",
+        "╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝       ╚═══╝  ╚═════╝ "
+    );
+    
+    # عرض الشعار حرفًا بحرف مع تأثير الكتابة
+    foreach my $line (@logo) {
+        print $scheme->{'title'};
+        for (my $i = 0; $i < length($line); $i++) {
+            print substr($line, $i, 1);
+            select(undef, undef, undef, 0.002); # تأخير صغير للتأثير المرئي
+        }
+        print "\n";
+    }
+    
+    # عرض معلومات الإصدار والمؤلف
+    print $scheme->{'reset'} . "\n";
+    print $scheme->{'heading'} . "╔" . "═" x 70 . "╗\n";
+    print $scheme->{'heading'} . "║" . $scheme->{'normal'} . " " . $scheme->{'bold'} . "Enhanced Nikto v3" . $scheme->{'reset'} . $scheme->{'normal'} . " - Advanced Web Scanner with Protection Bypass " . $scheme->{'heading'} . "     ║\n";
+    print $scheme->{'heading'} . "║" . $scheme->{'normal'} . " Copyright (C) 2025 Enhanced Nikto Project " . $scheme->{'heading'} . "                         ║\n";
+    print $scheme->{'heading'} . "╚" . "═" x 70 . "╝\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # عرض معلومات الميزات
+    print $scheme->{'heading'} . "[ " . $scheme->{'highlight'} . $scheme->{'bold'} . "FEATURES" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    
+    my @features = (
+        "Advanced WAF Bypass Techniques",
+        "IDS/IPS Evasion Capabilities",
+        "25+ New Vulnerability Checks",
+        "Enhanced UI with Multiple Color Schemes",
+        "Improved Reporting and Visualization",
+        "AI-Based Protection Evasion",
+        "Multi-Layer Obfuscation Strategies"
+    );
+    
+    foreach my $feature (@features) {
+        print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . $feature . "\n";
+        select(undef, undef, undef, 0.1); # تأخير للتأثير المرئي
+    }
+    
+    print $scheme->{'heading'} . " └─ " . $scheme->{'success'} . "And much more...\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # عرض شريط التقدم
+    print $scheme->{'heading'} . "[ " . $scheme->{'highlight'} . $scheme->{'bold'} . "INITIALIZING" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ ";
+    
+    for (my $i = 0; $i <= 20; $i++) {
+        print $scheme->{'success'} . "█";
+        select(undef, undef, undef, 0.05); # تأخير للتأثير المرئي
+    }
+    
+    print $scheme->{'normal'} . " Complete!\n";
+    print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Ready to scan\n";
+    print $scheme->{'reset'} . "\n\n";
+    
+    # عرض قائمة مخططات الألوان
+    print $scheme->{'heading'} . "[ " . $scheme->{'highlight'} . $scheme->{'bold'} . "COLOR SCHEMES" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ " . $COLOR_SCHEMES{'cyber'}->{'title'} . "Cyber" . $scheme->{'reset'} . " (Default)\n";
+    print $scheme->{'heading'} . " ├─ " . $COLOR_SCHEMES{'desert'}->{'title'} . "Desert" . $scheme->{'reset'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $COLOR_SCHEMES{'neon'}->{'title'} . "Neon" . $scheme->{'reset'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $COLOR_SCHEMES{'midnight'}->{'title'} . "Midnight" . $scheme->{'reset'} . "\n";
+    print $scheme->{'heading'} . " └─ " . $COLOR_SCHEMES{'blood'}->{'title'} . "Blood" . $scheme->{'reset'} . "\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # عرض نصائح الاستخدام
+    print $scheme->{'heading'} . "[ " . $scheme->{'highlight'} . $scheme->{'bold'} . "USAGE TIPS" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Change color scheme: " . $scheme->{'info'} . "-color <scheme_name>\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Enable WAF bypass: " . $scheme->{'info'} . "-waf\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Enable IDS/IPS bypass: " . $scheme->{'info'} . "-ids\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Enable advanced protection bypass: " . $scheme->{'info'} . "-bypass\n";
+    print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Scan with all new vulnerabilities: " . $scheme->{'info'} . "-vuln2025\n";
+    print $scheme->{'reset'} . "\n\n";
+}
+
+sub nikto_modern_ui_scan {
+    my ($mark) = @_;
+    my $scheme = $COLOR_SCHEMES{$mark->{'color_scheme'}};
+    
+    # تحديث واجهة المستخدم أثناء الفحص
+    if ($mark->{'supports_color'} && $mark->{'use_colors'}) {
+        # تنسيق رسائل الفحص
+        $mark->{'format_functions'}->{'scan_message'} = \&format_scan_message;
+        $mark->{'format_functions'}->{'finding_message'} = \&format_finding_message;
+    }
+    
+    return $mark;
+}
+
+sub format_scan_message {
+    my ($mark, $message) = @_;
+    my $scheme = $COLOR_SCHEMES{$mark->{'color_scheme'}};
+    
+    # تنسيق رسالة الفحص
+    return $scheme->{'info'} . "[" . $scheme->{'normal'} . "SCAN" . $scheme->{'info'} . "] " . $scheme->{'normal'} . $message . $scheme->{'reset'};
+}
+
+sub format_finding_message {
+    my ($mark, $message, $severity) = @_;
+    my $scheme = $COLOR_SCHEMES{$mark->{'color_scheme'}};
+    
+    # تحديد لون الرسالة بناءً على الخطورة
+    my $color = $scheme->{'normal'};
+    if ($severity eq 'Critical') {
+        $color = $scheme->{'error'} . $scheme->{'bold'} . $scheme->{'blink'};
+    }
+    elsif ($severity eq 'High') {
+        $color = $scheme->{'error'};
+    }
+    elsif ($severity eq 'Medium') {
+        $color = $scheme->{'warning'};
+    }
+    elsif ($severity eq 'Low') {
+        $color = $scheme->{'success'};
+    }
+    elsif ($severity eq 'Info') {
+        $color = $scheme->{'info'};
+    }
+    
+    # تنسيق رسالة الاكتشاف
+    return $scheme->{'heading'} . "[" . $color . $severity . $scheme->{'reset'} . $scheme->{'heading'} . "] " . $color . $message . $scheme->{'reset'};
+}
+
+sub nikto_modern_ui_report {
+    my ($mark) = @_;
+    my $scheme = $COLOR_SCHEMES{$mark->{'color_scheme'}};
+    
+    # تنسيق التقارير باستخدام مخطط الألوان المحدد
+    if ($mark->{'report_format'} eq 'cli' && $mark->{'supports_color'} && $mark->{'use_colors'}) {
+        # تنسيق تقرير سطر الأوامر
+        format_cli_report($mark, $scheme);
+    }
+    
+    return $mark;
+}
+
+sub format_cli_report {
+    my ($mark, $scheme) = @_;
+    
+    # تنسيق رأس التقرير
+    print "\n";
+    print $scheme->{'heading'} . "╔" . "═" x 70 . "╗\n";
+    print $scheme->{'heading'} . "║" . $scheme->{'bg_black'} . $scheme->{'title'} . $scheme->{'bold'} . " NIKTO ENHANCED SCAN REPORT " . $scheme->{'reset'} . $scheme->{'heading'} . "                                   ║\n";
+    print $scheme->{'heading'} . "╚" . "═" x 70 . "╝\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # ملخص الفحص
+    print $scheme->{'heading'} . "[ " . $scheme->{'title'} . $scheme->{'bold'} . "SCAN SUMMARY" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Target: " . $scheme->{'info'} . $mark->{'hostname'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "IP: " . $scheme->{'info'} . $mark->{'ip'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Port: " . $scheme->{'info'} . $mark->{'port'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Start Time: " . $scheme->{'info'} . $mark->{'start_time'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "End Time: " . $scheme->{'info'} . $mark->{'end_time'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Scan Duration: " . $scheme->{'info'} . $mark->{'scan_duration'} . " seconds\n";
+    print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Total Requests: " . $scheme->{'info'} . $mark->{'total_requests'} . "\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # معلومات الخادم
+    print $scheme->{'heading'} . "[ " . $scheme->{'title'} . $scheme->{'bold'} . "SERVER INFORMATION" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Server: " . $scheme->{'info'} . ($mark->{'banner'} || "Unknown") . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Operating System: " . $scheme->{'info'} . ($mark->{'os'} || "Unknown") . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Web Server: " . $scheme->{'info'} . ($mark->{'webserver'} || "Unknown") . "\n";
+    print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Technologies: " . $scheme->{'info'} . ($mark->{'technologies'} || "Unknown") . "\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # أنظمة الحماية المكتشفة
+    print $scheme->{'heading'} . "[ " . $scheme->{'title'} . $scheme->{'bold'} . "PROTECTION SYSTEMS" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    if ($mark->{'protection_system'}) {
+        print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Detected: " . $scheme->{'warning'} . $mark->{'protection_system'} . "\n";
+        print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "Bypass Strategy: " . $scheme->{'success'} . $mark->{'bypass_strategy'} . "\n";
+        print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Status: " . $scheme->{'success'} . "Bypassed Successfully\n";
+    }
+    elsif ($mark->{'waf_type'}) {
+        print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "WAF Detected: " . $scheme->{'warning'} . $mark->{'waf_type'} . "\n";
+        print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Status: " . $scheme->{'success'} . "Bypassed Successfully\n";
+    }
+    elsif ($mark->{'ids_ips_type'}) {
+        print $scheme->{'heading'} . " ├─ " . $scheme->{'normal'} . "IDS/IPS Detected: " . $scheme->{'warning'} . $mark->{'ids_ips_type'} . "\n";
+        print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "Status: " . $scheme->{'success'} . "Bypassed Successfully\n";
+    }
+    else {
+        print $scheme->{'heading'} . " └─ " . $scheme->{'normal'} . "No protection systems detected\n";
+    }
+    print $scheme->{'reset'} . "\n";
+    
+    # إحصائيات الثغرات
+    print $scheme->{'heading'} . "[ " . $scheme->{'title'} . $scheme->{'bold'} . "VULNERABILITY STATISTICS" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'error'} . $scheme->{'bold'} . "Critical: " . $mark->{'vulns_critical'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'error'} . "High: " . $mark->{'vulns_high'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'warning'} . "Medium: " . $mark->{'vulns_medium'} . "\n";
+    print $scheme->{'heading'} . " ├─ " . $scheme->{'success'} . "Low: " . $mark->{'vulns_low'} . "\n";
+    print $scheme->{'heading'} . " └─ " . $scheme->{'info'} . "Informational: " . $mark->{'vulns_info'} . "\n";
+    print $scheme->{'reset'} . "\n";
+    
+    # تفاصيل الثغرات
+    print $scheme->{'heading'} . "[ " . $scheme->{'title'} . $scheme->{'bold'} . "VULNERABILITY DETAILS" . $scheme->{'reset'} . $scheme->{'heading'} . " ]\n";
+    
+    # هنا يتم عرض تفاصيل الثغرات المكتشفة
+    if ($mark->{'results'} && @{$mark->{'results'}} > 0) {
+        my $count = 1;
+        foreach my $result (@{$mark->{'results'}}) {
+            my $severity = $result->{'severity'} || 'Medium';
+            my $color = $scheme->{'normal'};
+            
+            if ($severity eq 'Critical') {
+                $color = $scheme->{'error'} . $scheme->{'bold'};
+            }
+            elsif ($severity eq 'High') {
+                $color = $scheme->{'error'};
+            }
+            elsif ($severity eq 'Medium') {
+                $color = $scheme->{'warning'};
+            }
+            elsif ($severity eq 'Low') {
+                $color = $scheme->{'success'};
+            }
+            elsif ($severity eq 'Info') {
+                $color = $scheme->{'info'};
+            }
+            
+            print $scheme->{'heading'} . " ├─ " . $color . "[$severity] " . $result->{'message'} . "\n";
+            print $scheme->{'heading'} . " │  " . $scheme->{'info'} . "URL: " . $result->{'method'} . " " . $result->{'uri'} . "\n";
+            
+            if ($count < scalar(@{$mark->{'results'}})) {
+                print $scheme->{'heading'} . " │\n";
+            }
+            
+            $count++;
+        }
+    }
+    else {
+        print $scheme->{'heading'} . " └─ " . $scheme->{'success'} . "No vulnerabilities found\n";
+    }
+    
+    print $scheme->{'reset'} . "\n";
+    
+    # تذييل التقرير
+    print $scheme->{'heading'} . "╔" . "═" x 70 . "╗\n";
+    print $scheme->{'heading'} . "║" . $scheme->{'normal'} . " Scan completed successfully. Thank you for using Enhanced Nikto v3! " . $scheme->{'heading'} . "║\n";
+    print $scheme->{'heading'} . "╚" . "═" x 70 . "╝\n";
+    print $scheme->{'reset'} . "\n";
+}
+
+# وظيفة مساعدة لتطبيق الألوان على النص
+sub colorize {
+    my ($text, $color_code, $mark) = @_;
+    
+    # التحقق مما إذا كانت الألوان مدعومة ومفعلة
+    if ($mark->{'supports_color'} && $mark->{'use_colors'}) {
+        return $color_code . $text . $COLOR_SCHEMES{$mark->{'color_scheme'}}->{'reset'};
+    }
+    
+    return $text;
+}
+
+1;

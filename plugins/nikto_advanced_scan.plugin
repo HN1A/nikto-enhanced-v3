@@ -1,0 +1,327 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto Advanced Scanning Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds advanced scanning capabilities to Nikto
+# including comprehensive site scanning, enhanced vulnerability detection,
+# and advanced scanning options.
+#
+
+use strict;
+
+# Plugin register function
+sub nikto_advanced_scan_register {
+    my $id = { 
+        name        => "advanced_scan",
+        full_name   => "Advanced Scanning Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides advanced scanning capabilities including comprehensive site scanning, enhanced vulnerability detection, and advanced scanning options",
+        version     => "1.0",
+        hooks       => {
+                         scan => { method => \&scan_advanced, weight => 10, },
+                         start => { method => \&load_advanced_databases, },
+                       },
+        options => {
+                     advanced => "Enable advanced scanning features (1=on, 0=off)",
+                     comprehensive => "Enable comprehensive site scanning (1=on, 0=off)",
+                     depth => "Maximum crawl depth for comprehensive scanning (default: 3)",
+                     maxpages => "Maximum pages to scan in comprehensive mode (default: 1000)",
+                     enhanced_db => "Use enhanced vulnerability database (1=on, 0=off)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Load advanced databases
+sub load_advanced_databases {
+    my ($self, $mark) = @_;
+    my $dbdir = "$mark->{'CONFIGFILE'}->{'EXECDIR'}/databases";
+    my $enhanced_dbdir = "$mark->{'CONFIGFILE'}->{'EXECDIR'}/../enhanced_db";
+    
+    # Check if enhanced database option is enabled
+    if (defined $mark->{'advanced_scan.enhanced_db'} && $mark->{'advanced_scan.enhanced_db'} eq '1') {
+        # Load enhanced vulnerability database
+        if (-e "$enhanced_dbdir/db_vulnerabilities_2025.db") {
+            $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Loading enhanced vulnerability database from $enhanced_dbdir/db_vulnerabilities_2025.db\n";
+            
+            # Load the enhanced database
+            my @EDBTESTS;
+            open(my $db_file, "<", "$enhanced_dbdir/db_vulnerabilities_2025.db") || die "Cannot open enhanced database: $!";
+            while (<$db_file>) {
+                chomp;
+                if ($_ =~ /^\"/) {
+                    my @entry = parse_db_line($_);
+                    if (scalar @entry > 0) {
+                        push(@EDBTESTS, \@entry);
+                    }
+                }
+            }
+            close($db_file);
+            
+            # Add enhanced tests to the main tests array
+            $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Added " . scalar(@EDBTESTS) . " enhanced vulnerability tests\n";
+            push(@{$mark->{'TESTS'}}, @EDBTESTS);
+        }
+        else {
+            $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Enhanced vulnerability database not found at $enhanced_dbdir/db_vulnerabilities_2025.db\n";
+        }
+    }
+    
+    return $mark;
+}
+
+# Parse database line
+sub parse_db_line {
+    my $line = shift;
+    my @entry;
+    
+    # Remove quotes and split by comma
+    $line =~ s/^\"//;
+    $line =~ s/\"$//;
+    @entry = split(/\",\"/, $line);
+    
+    # Clean up entries
+    foreach my $item (@entry) {
+        $item =~ s/\\"/"/g;
+    }
+    
+    return @entry;
+}
+
+# Main scanning function
+sub scan_advanced {
+    my ($self, $mark) = @_;
+    
+    # Check if advanced scanning is enabled
+    if (!defined $mark->{'advanced_scan.advanced'} || $mark->{'advanced_scan.advanced'} ne '1') {
+        return $mark;
+    }
+    
+    $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Advanced scanning enabled\n";
+    
+    # Comprehensive site scanning
+    if (defined $mark->{'advanced_scan.comprehensive'} && $mark->{'advanced_scan.comprehensive'} eq '1') {
+        $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Comprehensive site scanning enabled\n";
+        
+        # Set default values for depth and maxpages if not defined
+        my $depth = defined $mark->{'advanced_scan.depth'} ? $mark->{'advanced_scan.depth'} : 3;
+        my $maxpages = defined $mark->{'advanced_scan.maxpages'} ? $mark->{'advanced_scan.maxpages'} : 1000;
+        
+        $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Crawl depth: $depth, Max pages: $maxpages\n";
+        
+        # Perform comprehensive site scanning
+        comprehensive_scan($self, $mark, $depth, $maxpages);
+    }
+    
+    return $mark;
+}
+
+# Comprehensive site scanning function
+sub comprehensive_scan {
+    my ($self, $mark, $depth, $maxpages) = @_;
+    my %crawled_urls;
+    my @urls_to_crawl;
+    my $current_depth = 0;
+    my $pages_scanned = 0;
+    
+    # Start with the base URL
+    push(@urls_to_crawl, { url => $mark->{'hostname'}, depth => 0 });
+    
+    # Crawl the site up to the specified depth
+    while (@urls_to_crawl && $pages_scanned < $maxpages) {
+        my $current = shift @urls_to_crawl;
+        my $url = $current->{'url'};
+        my $url_depth = $current->{'depth'};
+        
+        # Skip if already crawled
+        next if exists $crawled_urls{$url};
+        
+        # Mark as crawled
+        $crawled_urls{$url} = 1;
+        $pages_scanned++;
+        
+        # Scan the current URL
+        $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Scanning URL: $url (Depth: $url_depth)\n";
+        scan_url($self, $mark, $url);
+        
+        # If we haven't reached the maximum depth, extract and queue links
+        if ($url_depth < $depth) {
+            my @links = extract_links($self, $mark, $url);
+            foreach my $link (@links) {
+                push(@urls_to_crawl, { url => $link, depth => $url_depth + 1 }) unless exists $crawled_urls{$link};
+            }
+        }
+    }
+    
+    $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Comprehensive scan completed. Scanned $pages_scanned pages.\n";
+    return;
+}
+
+# Scan a specific URL
+sub scan_url {
+    my ($self, $mark, $url) = @_;
+    
+    # Use LW2 to request the URL
+    my ($res, $content, $error, $request, $response) = LW2::http_request($url, 'GET', '', '', '', '', 'advanced_scan');
+    
+    # Check for errors
+    if ($error) {
+        $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Error scanning $url: $error\n";
+        return;
+    }
+    
+    # Check for vulnerabilities in the response
+    check_vulnerabilities($self, $mark, $url, $content, $response);
+    
+    return;
+}
+
+# Extract links from HTML content
+sub extract_links {
+    my ($self, $mark, $url) = @_;
+    my @links;
+    
+    # Use LW2 to request the URL
+    my ($res, $content, $error, $request, $response) = LW2::http_request($url, 'GET', '', '', '', '', 'advanced_scan');
+    
+    # Check for errors
+    if ($error) {
+        return @links;
+    }
+    
+    # Extract links from the HTML content
+    while ($content =~ m/<a\s+(?:[^>]*?\s+)?href="([^"]*)"(?:\s+[^>]*)?>/gi) {
+        my $link = $1;
+        
+        # Skip empty links, javascript, and anchors
+        next if $link =~ /^(?:javascript:|#)/i;
+        
+        # Convert relative URLs to absolute
+        if ($link !~ /^https?:\/\//i) {
+            # Handle root-relative URLs
+            if ($link =~ /^\//) {
+                my ($scheme, $authority) = ($url =~ /^(https?:\/\/[^\/]+)(\/|$)/i);
+                $link = $scheme . $link if $scheme;
+            }
+            # Handle relative URLs
+            else {
+                $url =~ s/[^\/]+$//;
+                $link = $url . $link;
+            }
+        }
+        
+        # Normalize the URL
+        $link =~ s/#.*$//;  # Remove fragment
+        $link =~ s/\?$//;   # Remove empty query string
+        
+        # Add to the list if it's on the same host
+        if ($link =~ /^https?:\/\/([^\/]+)/i) {
+            my $link_host = $1;
+            my ($target_host) = ($mark->{'hostname'} =~ /^https?:\/\/([^\/]+)/i);
+            
+            push(@links, $link) if $link_host eq $target_host;
+        }
+    }
+    
+    return @links;
+}
+
+# Check for vulnerabilities in the response
+sub check_vulnerabilities {
+    my ($self, $mark, $url, $content, $response) = @_;
+    
+    # Check for common security issues
+    
+    # Check for information disclosure
+    if ($content =~ /(?:password|username|user name|userid|user id).*?['"]\s*value\s*=\s*['"](.+?)['"]/i) {
+        add_vulnerability($self, $mark, $url, "Possible information disclosure: Credentials found in HTML", "Information disclosure vulnerability: credentials found in HTML source. This could expose sensitive authentication information.");
+    }
+    
+    # Check for error messages
+    if ($content =~ /(?:sql syntax|sql error|odbc|oledb|jdbc|sql server|microsoft sql|oracle error|db2 error|postgresql error)/i) {
+        add_vulnerability($self, $mark, $url, "Database error message disclosure", "Database error messages are being disclosed. This could provide an attacker with information about the database structure and potential attack vectors.");
+    }
+    
+    # Check for directory listing
+    if ($content =~ /<title>Index of/i || $content =~ /<h1>Index of/i) {
+        add_vulnerability($self, $mark, $url, "Directory listing enabled", "Directory listing is enabled. This could expose sensitive files and information about the server structure.");
+    }
+    
+    # Check for server information disclosure in headers
+    if ($response->{'server'}) {
+        add_vulnerability($self, $mark, $url, "Server information disclosure: " . $response->{'server'}, "Server header reveals detailed version information: " . $response->{'server'} . ". This could help attackers identify specific vulnerabilities.");
+    }
+    
+    # Check for missing security headers
+    my @security_headers = (
+        { name => 'X-Frame-Options', desc => 'Protection against clickjacking attacks' },
+        { name => 'X-XSS-Protection', desc => 'Protection against cross-site scripting attacks' },
+        { name => 'X-Content-Type-Options', desc => 'Protection against MIME type sniffing attacks' },
+        { name => 'Content-Security-Policy', desc => 'Protection against various attacks including XSS and data injection' },
+        { name => 'Strict-Transport-Security', desc => 'Enforces secure (HTTPS) connections' },
+        { name => 'Referrer-Policy', desc => 'Controls how much referrer information should be included with requests' }
+    );
+    
+    foreach my $header (@security_headers) {
+        my $found = 0;
+        foreach my $key (keys %{$response}) {
+            if (lc($key) eq lc($header->{'name'})) {
+                $found = 1;
+                last;
+            }
+        }
+        
+        if (!$found) {
+            add_vulnerability($self, $mark, $url, "Missing security header: " . $header->{'name'}, "The " . $header->{'name'} . " header is missing. This header provides " . $header->{'desc'} . ".");
+        }
+    }
+    
+    # Check for insecure cookie settings
+    if ($response->{'set-cookie'}) {
+        my @cookies = ref($response->{'set-cookie'}) eq 'ARRAY' ? @{$response->{'set-cookie'}} : ($response->{'set-cookie'});
+        
+        foreach my $cookie (@cookies) {
+            if ($cookie !~ /;\s*httponly/i) {
+                add_vulnerability($self, $mark, $url, "Cookie without HttpOnly flag", "A cookie is set without the HttpOnly flag, which helps mitigate the risk of client side script accessing the protected cookie.");
+            }
+            
+            if ($cookie !~ /;\s*secure/i && $url =~ /^https:/i) {
+                add_vulnerability($self, $mark, $url, "Cookie without Secure flag on HTTPS", "A cookie is set without the Secure flag on an HTTPS connection, which means it can be transmitted over unencrypted HTTP connections.");
+            }
+            
+            if ($cookie !~ /;\s*samesite=/i) {
+                add_vulnerability($self, $mark, $url, "Cookie without SameSite attribute", "A cookie is set without the SameSite attribute, which helps prevent CSRF attacks.");
+            }
+        }
+    }
+    
+    return;
+}
+
+# Add a vulnerability to the report
+sub add_vulnerability {
+    my ($self, $mark, $url, $title, $description) = @_;
+    
+    # Create a unique ID for this vulnerability
+    my $id = "ADV" . int(rand(10000));
+    
+    # Add to the vulnerability list
+    push(@{$mark->{'VULNS'}}, {
+        'TARGET'        => $url,
+        'VULNERABILITY' => $title,
+        'DESCRIPTION'   => $description,
+        'ID'            => $id,
+        'METHOD'        => 'GET',
+        'HTTP_STATUS'   => '200',
+        'PLUGIN'        => 'advanced_scan'
+    });
+    
+    # Add to the plugin report
+    $mark->{'PLUGIN_REPORT'}->{'advanced_scan'} .= "Found vulnerability: $title at $url\n";
+    
+    return;
+}
+
+1;

@@ -1,0 +1,162 @@
+###############################################################################
+#  Copyright (C) 2025 Manus AI
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to
+#  Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+###############################################################################
+# PURPOSE:
+# إضافة للكشف عن ثغرات إطارات العمل الحديثة
+###############################################################################
+
+sub nikto_frameworks_init {
+    my $id = { name        => "nikto_frameworks",
+               full_name   => "فحص ثغرات إطارات العمل الحديثة",
+               author      => "Manus AI",
+               description => "يبحث عن ثغرات أمنية في إطارات العمل الحديثة مثل Laravel وSymfony وNext.js",
+               hooks       => {
+                   scan => { method => \&nikto_frameworks_scan, },
+                   start => { method => \&nikto_frameworks_load, },
+               },
+               copyright => "2025 Manus AI",
+               options   => {
+                   frameworks_scan => "تفعيل فحص ثغرات إطارات العمل",
+               }
+    };
+    return $id;
+}
+
+sub nikto_frameworks_load {
+    # تحميل قاعدة بيانات إطارات العمل
+    my ($mark) = @_;
+    my $dbfile = "$VARIABLES{'PLUGINDIR'}/../databases/db_frameworks.db";
+    
+    if (-f $dbfile) {
+        open(my $DB, "<", $dbfile) || die print STDERR "+ ERROR: Unable to open $dbfile: $!\n";
+        my @DBDATA = <$DB>;
+        close($DB);
+        
+        # تحميل قاعدة البيانات
+        foreach my $line (@DBDATA) {
+            $line =~ s/\#.*$//;
+            if ($line =~ /^"([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]*)",(?:"([^"]*)")?,"([^"]+)","([^"]+)","([^"]+)","([^"]*)"/) {
+                my ($id, $variables, $tuning, $method, $uri, $data, $headers, $expected, $message, $solution, $reference) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+                
+                # تخزين البيانات في مصفوفة TESTS
+                $TESTS{$id} = {
+                    "ID"        => $id,
+                    "OSVDB"     => "",
+                    "NAME"      => $message,
+                    "METHOD"    => $method,
+                    "URI"       => $uri,
+                    "DATA"      => $data,
+                    "HEADERS"   => $headers,
+                    "EXPECTED"  => $expected,
+                    "MATCH"     => "",
+                    "NOMATCH"   => "",
+                    "TUNING"    => $tuning,
+                    "FUNCTION"  => \&nikto_frameworks_check,
+                    "ARGS"      => { solution => $solution, reference => $reference },
+                    "VARIABLES" => $variables
+                };
+            }
+        }
+        nprint("+ تم تحميل قاعدة بيانات إطارات العمل الحديثة");
+    }
+    else {
+        nprint("+ تحذير: لم يتم العثور على قاعدة بيانات إطارات العمل: $dbfile");
+    }
+}
+
+sub nikto_frameworks_scan {
+    my ($mark) = @_;
+    
+    # فحص ما إذا كان الخيار مفعل
+    return if ($CLI{'frameworks_scan'} eq "0");
+    
+    nprint("+ بدء فحص ثغرات إطارات العمل الحديثة");
+    
+    # تحليل الاستجابات للكشف عن إطارات العمل
+    my $framework_detected = detect_framework($mark);
+    if ($framework_detected) {
+        nprint("+ تم اكتشاف إطار العمل: $framework_detected");
+    }
+    
+    # تنفيذ الاختبارات من قاعدة البيانات
+    foreach my $test (keys %TESTS) {
+        if ($test =~ /^9\d+$/) {  # اختبارات إطارات العمل تبدأ بـ 9
+            my $mark_copy = $mark;
+            run_test($mark_copy, $test);
+        }
+    }
+}
+
+sub detect_framework {
+    my ($mark) = @_;
+    
+    # إرسال طلب GET للصفحة الرئيسية
+    my ($res, $content, $error, $request, $response) = nfetch($mark, "/", "GET", "", "", "", "detect_framework");
+    
+    return undef if (!$res);
+    
+    # البحث عن علامات إطارات العمل المعروفة في الاستجابة
+    my %framework_signatures = (
+        'Laravel' => ['laravel', 'Laravel', 'XSRF-TOKEN'],
+        'Symfony' => ['symfony', 'Symfony', '_csrf_token'],
+        'Django' => ['django', 'csrfmiddlewaretoken'],
+        'Ruby on Rails' => ['rails', '_rails_session'],
+        'Angular' => ['ng-app', 'angular.js', 'angular.min.js'],
+        'React' => ['react.js', 'react.min.js', 'react-dom'],
+        'Vue.js' => ['vue.js', 'vue.min.js'],
+        'Next.js' => ['__NEXT_DATA__', 'next/head'],
+        'Nuxt.js' => ['__NUXT__', 'nuxt-link'],
+        'WordPress' => ['wp-content', 'wp-includes', 'WordPress'],
+        'Drupal' => ['Drupal.settings', 'drupal.js'],
+        'Joomla' => ['joomla', 'Joomla!'],
+        'ASP.NET' => ['__VIEWSTATE', 'asp.net', 'ASP.NET'],
+        'Express.js' => ['express', 'Express']
+    );
+    
+    foreach my $framework (keys %framework_signatures) {
+        foreach my $signature (@{$framework_signatures{$framework}}) {
+            if ($content =~ /$signature/i) {
+                return $framework;
+            }
+        }
+    }
+    
+    # البحث في رؤوس الاستجابة
+    foreach my $framework (keys %framework_signatures) {
+        foreach my $signature (@{$framework_signatures{$framework}}) {
+            if ($response->{'headers'} =~ /$signature/i) {
+                return $framework;
+            }
+        }
+    }
+    
+    return undef;
+}
+
+sub nikto_frameworks_check {
+    my ($mark, $result, $request, $response, $args) = @_;
+    
+    # إضافة معلومات إضافية للنتائج
+    if ($result) {
+        $result->{'message'} .= " - الحل: " . $args->{'solution'} if ($args->{'solution'});
+        $result->{'message'} .= " - المرجع: " . $args->{'reference'} if ($args->{'reference'});
+    }
+    
+    return $result;
+}
+
+1;

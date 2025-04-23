@@ -1,0 +1,370 @@
+#!/usr/bin/perl
+#
+# Enhanced Visualization Module for Nikto
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds advanced visualization features and auto-rotating color schemes
+
+package nikto_advanced_visualization;
+use strict;
+
+# Plugin register function
+sub nikto_advanced_visualization_register {
+    my $id = { 
+        name        => "advanced_visualization",
+        full_name   => "Advanced Visualization Module",
+        author      => "Enhanced Nikto Project",
+        description => "Adds advanced visualization features and auto-rotating color schemes",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&setup_visualization, },
+                         scan_start => { method => \&display_animated_banner, },
+                         report => { method => \&enhance_report_visualization, },
+                       },
+    };
+    
+    return $id;
+}
+
+# ANSI color codes
+my %COLORS = (
+    reset      => "\033[0m",
+    bold       => "\033[1m",
+    underline  => "\033[4m",
+    black      => "\033[30m",
+    red        => "\033[31m",
+    green      => "\033[32m",
+    yellow     => "\033[33m",
+    blue       => "\033[34m",
+    magenta    => "\033[35m",
+    cyan       => "\033[36m",
+    white      => "\033[37m",
+    bg_black   => "\033[40m",
+    bg_red     => "\033[41m",
+    bg_green   => "\033[42m",
+    bg_yellow  => "\033[43m",
+    bg_blue    => "\033[44m",
+    bg_magenta => "\033[45m",
+    bg_cyan    => "\033[46m",
+    bg_white   => "\033[47m",
+);
+
+# Advanced color schemes
+my %COLOR_SCHEMES = (
+    cyber => {
+        header    => "\033[38;5;39m",
+        info      => "\033[38;5;45m",
+        success   => "\033[38;5;46m",
+        warning   => "\033[38;5;208m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;51m",
+        normal    => "\033[38;5;15m",
+        banner    => "\033[38;5;33m",
+    },
+    desert => {
+        header    => "\033[38;5;172m",
+        info      => "\033[38;5;180m",
+        success   => "\033[38;5;107m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;160m",
+        highlight => "\033[38;5;220m",
+        normal    => "\033[38;5;223m",
+        banner    => "\033[38;5;178m",
+    },
+    neon => {
+        header    => "\033[38;5;201m",
+        info      => "\033[38;5;207m",
+        success   => "\033[38;5;118m",
+        warning   => "\033[38;5;226m",
+        error     => "\033[38;5;197m",
+        highlight => "\033[38;5;213m",
+        normal    => "\033[38;5;159m",
+        banner    => "\033[38;5;205m",
+    },
+    midnight => {
+        header    => "\033[38;5;63m",
+        info      => "\033[38;5;75m",
+        success   => "\033[38;5;79m",
+        warning   => "\033[38;5;215m",
+        error     => "\033[38;5;203m",
+        highlight => "\033[38;5;147m",
+        normal    => "\033[38;5;153m",
+        banner    => "\033[38;5;69m",
+    },
+    blood => {
+        header    => "\033[38;5;196m",
+        info      => "\033[38;5;203m",
+        success   => "\033[38;5;107m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;160m",
+        highlight => "\033[38;5;197m",
+        normal    => "\033[38;5;223m",
+        banner    => "\033[38;5;124m",
+    },
+    matrix => {
+        header    => "\033[38;5;46m",
+        info      => "\033[38;5;40m",
+        success   => "\033[38;5;118m",
+        warning   => "\033[38;5;190m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;82m",
+        normal    => "\033[38;5;35m",
+        banner    => "\033[38;5;28m",
+    },
+    sunset => {
+        header    => "\033[38;5;208m",
+        info      => "\033[38;5;215m",
+        success   => "\033[38;5;220m",
+        warning   => "\033[38;5;202m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;214m",
+        normal    => "\033[38;5;223m",
+        banner    => "\033[38;5;209m",
+    },
+    ocean => {
+        header    => "\033[38;5;39m",
+        info      => "\033[38;5;45m",
+        success   => "\033[38;5;50m",
+        warning   => "\033[38;5;220m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;51m",
+        normal    => "\033[38;5;159m",
+        banner    => "\033[38;5;27m",
+    },
+    forest => {
+        header    => "\033[38;5;28m",
+        info      => "\033[38;5;35m",
+        success   => "\033[38;5;40m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;46m",
+        normal    => "\033[38;5;151m",
+        banner    => "\033[38;5;22m",
+    },
+    aurora => {
+        header    => "\033[38;5;135m",
+        info      => "\033[38;5;141m",
+        success   => "\033[38;5;48m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;147m",
+        normal    => "\033[38;5;159m",
+        banner    => "\033[38;5;129m",
+    },
+);
+
+# Current color scheme
+my $current_scheme = "cyber";
+
+# Setup visualization
+sub setup_visualization {
+    my ($self, $mark) = @_;
+    
+    # Auto-rotate color scheme based on time
+    my @schemes = keys %COLOR_SCHEMES;
+    my $time = time();
+    $current_scheme = $schemes[$time % scalar(@schemes)];
+    
+    # Check if a specific color scheme was requested
+    if (defined $mark->{cli}->{'color-scheme'}) {
+        my $requested_scheme = lc($mark->{cli}->{'color-scheme'});
+        if (exists $COLOR_SCHEMES{$requested_scheme}) {
+            $current_scheme = $requested_scheme;
+        }
+    }
+    
+    # Store the current scheme in the mark for other plugins to use
+    $mark->{'current_color_scheme'} = $current_scheme;
+    
+    return $mark;
+}
+
+# Display animated banner
+sub display_animated_banner {
+    my ($self, $mark) = @_;
+    
+    # Skip if not in terminal mode
+    return $mark if ($mark->{'terminate'});
+    
+    # Get current scheme
+    my $scheme = $COLOR_SCHEMES{$current_scheme};
+    
+    # Clear screen
+    print "\033[2J\033[1;1H";
+    
+    # Animated banner frames
+    my @frames = (
+        [
+            "╔═══════════════════════════════════════════════════════════════╗",
+            "║                                                               ║",
+            "║   ███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ██╗   ██╗██████╗ ║",
+            "║   ████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██║   ██║╚════██╗║",
+            "║   ██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    ██║   ██║ █████╔╝║",
+            "║   ██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ╚██╗ ██╔╝██╔═══╝ ║",
+            "║   ██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝     ╚████╔╝ ███████╗║",
+            "║   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝       ╚═══╝  ╚══════╝║",
+            "║                                                               ║",
+            "║   Enhanced Edition v3.5.0                                     ║",
+            "║   Advanced Web Server Scanner with Protection Bypass          ║",
+            "║                                                               ║",
+            "╚═══════════════════════════════════════════════════════════════╝",
+        ],
+        [
+            "╔═══════════════════════════════════════════════════════════════╗",
+            "║                                                               ║",
+            "║   ███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ██╗   ██╗██████╗ ║",
+            "║   ████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██║   ██║╚════██╗║",
+            "║   ██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    ██║   ██║ █████╔╝║",
+            "║   ██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ╚██╗ ██╔╝██╔═══╝ ║",
+            "║   ██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝     ╚████╔╝ ███████╗║",
+            "║   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝       ╚═══╝  ╚══════╝║",
+            "║                                                               ║",
+            "║   Enhanced Edition v3.5.0                                     ║",
+            "║   Loading Advanced Modules...                                 ║",
+            "║                                                               ║",
+            "╚═══════════════════════════════════════════════════════════════╝",
+        ],
+        [
+            "╔═══════════════════════════════════════════════════════════════╗",
+            "║                                                               ║",
+            "║   ███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ██╗   ██╗██████╗ ║",
+            "║   ████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██║   ██║╚════██╗║",
+            "║   ██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    ██║   ██║ █████╔╝║",
+            "║   ██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ╚██╗ ██╔╝██╔═══╝ ║",
+            "║   ██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝     ╚████╔╝ ███████╗║",
+            "║   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝       ╚═══╝  ╚══════╝║",
+            "║                                                               ║",
+            "║   Enhanced Edition v3.5.0                                     ║",
+            "║   Initializing Protection Bypass Techniques...                ║",
+            "║                                                               ║",
+            "╚═══════════════════════════════════════════════════════════════╝",
+        ],
+        [
+            "╔═══════════════════════════════════════════════════════════════╗",
+            "║                                                               ║",
+            "║   ███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ██╗   ██╗██████╗ ║",
+            "║   ████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██║   ██║╚════██╗║",
+            "║   ██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    ██║   ██║ █████╔╝║",
+            "║   ██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ╚██╗ ██╔╝██╔═══╝ ║",
+            "║   ██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝     ╚████╔╝ ███████╗║",
+            "║   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝       ╚═══╝  ╚══════╝║",
+            "║                                                               ║",
+            "║   Enhanced Edition v3.5.0                                     ║",
+            "║   Ready - Using Color Scheme: $current_scheme                 ║",
+            "║                                                               ║",
+            "╚═══════════════════════════════════════════════════════════════╝",
+        ],
+    );
+    
+    # Display animation
+    foreach my $frame (@frames) {
+        print "\033[1;1H"; # Move cursor to top-left
+        foreach my $line (@$frame) {
+            print $scheme->{banner} . $line . $COLORS{reset} . "\n";
+        }
+        select(undef, undef, undef, 0.3); # Sleep for 300ms
+    }
+    
+    # Display color scheme info
+    print "\n";
+    print $scheme->{info} . "Using color scheme: " . $scheme->{highlight} . $current_scheme . $COLORS{reset} . "\n";
+    print $scheme->{info} . "Auto-rotation enabled: " . $scheme->{highlight} . "yes" . $COLORS{reset} . "\n";
+    print "\n";
+    
+    return $mark;
+}
+
+# Enhance report visualization
+sub enhance_report_visualization {
+    my ($self, $mark) = @_;
+    
+    # Skip if not in terminal mode
+    return $mark if ($mark->{'terminate'});
+    
+    # Get current scheme
+    my $scheme = $COLOR_SCHEMES{$current_scheme};
+    
+    # Add visual summary at the end of the report
+    print "\n";
+    print $scheme->{header} . "╔═══════════════════════════════════════════════════════════════╗" . $COLORS{reset} . "\n";
+    print $scheme->{header} . "║                      SCAN SUMMARY                             ║" . $COLORS{reset} . "\n";
+    print $scheme->{header} . "╚═══════════════════════════════════════════════════════════════╝" . $COLORS{reset} . "\n";
+    print "\n";
+    
+    # Count vulnerabilities by severity
+    my $critical = 0;
+    my $high = 0;
+    my $medium = 0;
+    my $low = 0;
+    my $info = 0;
+    
+    foreach my $item (@{$mark->{'scandata'}}) {
+        next unless (ref($item) eq "HASH");
+        next unless (exists $item->{'osvdb'});
+        
+        # Determine severity based on OSVDB ID range (simplified for demonstration)
+        my $osvdb = $item->{'osvdb'};
+        if ($osvdb =~ /^9/) { $critical++; }
+        elsif ($osvdb =~ /^8/) { $high++; }
+        elsif ($osvdb =~ /^7/) { $medium++; }
+        elsif ($osvdb =~ /^6/) { $low++; }
+        else { $info++; }
+    }
+    
+    # Display vulnerability counts
+    print $scheme->{error} . "Critical: " . $critical . $COLORS{reset} . "\n";
+    print $scheme->{warning} . "High: " . $high . $COLORS{reset} . "\n";
+    print $scheme->{info} . "Medium: " . $medium . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Low: " . $low . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Info: " . $info . $COLORS{reset} . "\n";
+    print "\n";
+    
+    # Display ASCII chart
+    print $scheme->{header} . "Vulnerability Distribution:" . $COLORS{reset} . "\n";
+    
+    my $max = max($critical, $high, $medium, $low, $info);
+    my $scale = ($max > 20) ? int($max / 20) + 1 : 1;
+    
+    # Display bars
+    display_bar("Critical", $critical, $scale, $scheme->{error});
+    display_bar("High    ", $high, $scale, $scheme->{warning});
+    display_bar("Medium  ", $medium, $scale, $scheme->{info});
+    display_bar("Low     ", $low, $scale, $scheme->{normal});
+    display_bar("Info    ", $info, $scale, $scheme->{normal});
+    
+    print "\n";
+    print $scheme->{normal} . "Each █ represents approximately " . $scale . " finding(s)" . $COLORS{reset} . "\n";
+    print "\n";
+    
+    # Display scan information
+    print $scheme->{header} . "Scan Information:" . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Target: " . $scheme->{highlight} . $mark->{'hostname'} . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Start Time: " . $scheme->{highlight} . $mark->{'start_time'} . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "End Time: " . $scheme->{highlight} . $mark->{'end_time'} . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Duration: " . $scheme->{highlight} . ($mark->{'end_time'} - $mark->{'start_time'}) . " seconds" . $COLORS{reset} . "\n";
+    print $scheme->{normal} . "Color Scheme: " . $scheme->{highlight} . $current_scheme . $COLORS{reset} . "\n";
+    print "\n";
+    
+    return $mark;
+}
+
+# Helper function to display a bar in the chart
+sub display_bar {
+    my ($label, $value, $scale, $color) = @_;
+    
+    my $bar_length = int($value / $scale);
+    my $bar = "█" x $bar_length;
+    
+    print $COLORS{reset} . $label . " | " . $color . $bar . $COLORS{reset} . " (" . $value . ")\n";
+}
+
+# Helper function to find the maximum value
+sub max {
+    my $max = shift;
+    foreach my $val (@_) {
+        $max = $val if $val > $max;
+    }
+    return $max;
+}
+
+1;

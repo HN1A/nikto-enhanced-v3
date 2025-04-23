@@ -1,0 +1,110 @@
+###############################################################################
+#  Copyright (C) 2025 Manus AI
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to
+#  Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+###############################################################################
+# PURPOSE:
+# إضافة للكشف عن ثغرات الحاويات والسحابة
+###############################################################################
+
+sub nikto_containers_cloud_init {
+    my $id = { name        => "nikto_containers_cloud",
+               full_name   => "فحص ثغرات الحاويات والسحابة",
+               author      => "Manus AI",
+               description => "يبحث عن ثغرات أمنية في بيئات الحاويات والسحابة",
+               hooks       => {
+                   scan => { method => \&nikto_containers_cloud_scan, },
+                   start => { method => \&nikto_containers_cloud_load, },
+               },
+               copyright => "2025 Manus AI",
+               options   => {
+                   cloud_scan => "تفعيل فحص ثغرات السحابة",
+               }
+    };
+    return $id;
+}
+
+sub nikto_containers_cloud_load {
+    # تحميل قاعدة بيانات الحاويات والسحابة
+    my ($mark) = @_;
+    my $dbfile = "$VARIABLES{'PLUGINDIR'}/../databases/db_containers_cloud.db";
+    
+    if (-f $dbfile) {
+        open(my $DB, "<", $dbfile) || die print STDERR "+ ERROR: Unable to open $dbfile: $!\n";
+        my @DBDATA = <$DB>;
+        close($DB);
+        
+        # تحميل قاعدة البيانات
+        foreach my $line (@DBDATA) {
+            $line =~ s/\#.*$//;
+            if ($line =~ /^"([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]*)",(?:"([^"]*)")?,"([^"]+)","([^"]+)","([^"]+)","([^"]*)"/) {
+                my ($id, $variables, $tuning, $method, $uri, $data, $headers, $expected, $message, $solution, $reference) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+                
+                # تخزين البيانات في مصفوفة TESTS
+                $TESTS{$id} = {
+                    "ID"        => $id,
+                    "OSVDB"     => "",
+                    "NAME"      => $message,
+                    "METHOD"    => $method,
+                    "URI"       => $uri,
+                    "DATA"      => $data,
+                    "HEADERS"   => $headers,
+                    "EXPECTED"  => $expected,
+                    "MATCH"     => "",
+                    "NOMATCH"   => "",
+                    "TUNING"    => $tuning,
+                    "FUNCTION"  => \&nikto_containers_cloud_check,
+                    "ARGS"      => { solution => $solution, reference => $reference },
+                    "VARIABLES" => $variables
+                };
+            }
+        }
+        nprint("+ تم تحميل قاعدة بيانات الحاويات والسحابة");
+    }
+    else {
+        nprint("+ تحذير: لم يتم العثور على قاعدة بيانات الحاويات والسحابة: $dbfile");
+    }
+}
+
+sub nikto_containers_cloud_scan {
+    my ($mark) = @_;
+    
+    # فحص ما إذا كان الخيار مفعل
+    return if ($CLI{'cloud_scan'} eq "0");
+    
+    nprint("+ بدء فحص ثغرات الحاويات والسحابة");
+    
+    # تنفيذ الاختبارات من قاعدة البيانات
+    foreach my $test (keys %TESTS) {
+        if ($test =~ /^8\d+$/) {  # اختبارات الحاويات والسحابة تبدأ بـ 8
+            my $mark_copy = $mark;
+            run_test($mark_copy, $test);
+        }
+    }
+}
+
+sub nikto_containers_cloud_check {
+    my ($mark, $result, $request, $response, $args) = @_;
+    
+    # إضافة معلومات إضافية للنتائج
+    if ($result) {
+        $result->{'message'} .= " - الحل: " . $args->{'solution'} if ($args->{'solution'});
+        $result->{'message'} .= " - المرجع: " . $args->{'reference'} if ($args->{'reference'});
+    }
+    
+    return $result;
+}
+
+1;

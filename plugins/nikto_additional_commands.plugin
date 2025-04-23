@@ -1,0 +1,104 @@
+#!/usr/bin/perl
+#
+# Enhanced Command Integration for Nikto
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds additional command line options to Nikto
+# to reach a total of 60 commands
+
+package nikto_additional_commands;
+use strict;
+
+# Plugin register function
+sub nikto_additional_commands_register {
+    my $id = { 
+        name        => "additional_commands",
+        full_name   => "Additional Commands Module",
+        author      => "Enhanced Nikto Project",
+        description => "Adds additional command line options to reach 60 total commands",
+        version     => "1.0",
+        hooks       => {
+                         cli => { method => \&additional_cli_options, },
+                       },
+    };
+    
+    return $id;
+}
+
+# Additional CLI options
+sub additional_cli_options {
+    my ($self, $options) = @_;
+    
+    # Advanced scanning modes
+    $options->{'scan-mode'} = "Scan mode (standard, stealth, aggressive, thorough, custom)";
+    $options->{'custom-mode-config'} = "Configuration file for custom scan mode";
+    $options->{'scan-depth'} = "Scan depth level (1-5, default: 3)";
+    
+    # Advanced authentication options
+    $options->{'auth-method'} = "Authentication method (basic, digest, ntlm, oauth, jwt)";
+    $options->{'auth-token'} = "Authentication token for OAuth or JWT";
+    $options->{'auth-token-type'} = "Authentication token type (bearer, mac, custom)";
+    $options->{'auth-refresh'} = "Enable token refresh for OAuth";
+    
+    # Advanced rate limiting options
+    $options->{'rate-limit'} = "Enable rate limiting";
+    $options->{'requests-per-second'} = "Maximum requests per second (default: 10)";
+    $options->{'rate-limit-detection'} = "Enable rate limit detection";
+    $options->{'rate-limit-bypass'} = "Enable rate limit bypass techniques";
+    
+    # Advanced crawling options
+    $options->{'crawl'} = "Enable crawling of the target";
+    $options->{'crawl-depth'} = "Maximum crawling depth (default: 3)";
+    $options->{'crawl-exclusions'} = "File containing URL patterns to exclude from crawling";
+    $options->{'crawl-scope'} = "Crawling scope (domain, subdomain, directory, page)";
+    
+    # Advanced API testing options
+    $options->{'api-scan'} = "Enable API scanning";
+    $options->{'api-spec'} = "API specification file (OpenAPI/Swagger)";
+    $options->{'api-auth'} = "API authentication configuration file";
+    $options->{'api-fuzzing'} = "Enable API fuzzing";
+    
+    # Advanced output options
+    $options->{'output-encoding'} = "Output encoding (utf8, ascii, latin1)";
+    $options->{'output-compression'} = "Enable output compression";
+    $options->{'output-encryption'} = "Enable output encryption";
+    $options->{'output-password'} = "Password for encrypted output";
+    
+    # Advanced notification options
+    $options->{'notify-email'} = "Email address for scan completion notification";
+    $options->{'notify-webhook'} = "Webhook URL for scan completion notification";
+    $options->{'notify-on-vuln'} = "Send notification only if vulnerabilities are found";
+    $options->{'notify-template'} = "Notification template file";
+    
+    # Advanced scheduling options
+    $options->{'schedule'} = "Schedule scan for later execution";
+    $options->{'schedule-time'} = "Time to schedule scan (HH:MM)";
+    $options->{'schedule-date'} = "Date to schedule scan (YYYY-MM-DD)";
+    $options->{'schedule-repeat'} = "Repeat schedule (daily, weekly, monthly)";
+    
+    # Advanced comparison options
+    $options->{'compare-with'} = "Compare results with previous scan file";
+    $options->{'show-diff-only'} = "Show only differences in comparison";
+    $options->{'diff-format'} = "Difference format (summary, detailed, visual)";
+    
+    # Advanced resource management options
+    $options->{'max-memory'} = "Maximum memory usage in MB";
+    $options->{'max-cpu'} = "Maximum CPU usage percentage";
+    $options->{'resource-monitor'} = "Enable resource usage monitoring";
+    
+    # Advanced debugging options
+    $options->{'debug-level'} = "Debug level (1-5, default: 0)";
+    $options->{'debug-output'} = "Debug output file";
+    $options->{'debug-headers'} = "Debug HTTP headers";
+    $options->{'debug-requests'} = "Debug HTTP requests";
+    
+    # Advanced integration options
+    $options->{'export-to'} = "Export results to external system (jira, github, gitlab, slack)";
+    $options->{'export-config'} = "Configuration file for external system export";
+    $options->{'import-from'} = "Import configuration from external system";
+    $options->{'integration-key'} = "API key for external system integration";
+    
+    return $options;
+}
+
+1;

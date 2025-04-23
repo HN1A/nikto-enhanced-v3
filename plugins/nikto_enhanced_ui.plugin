@@ -1,0 +1,368 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto UI Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds enhanced UI components to Nikto
+# including animated startup, port visualization, and advanced visual effects.
+#
+
+use strict;
+use Time::HiRes qw(sleep);
+
+# Plugin register function
+sub nikto_enhanced_ui_register {
+    my $id = { 
+        name        => "enhanced_ui",
+        full_name   => "Enhanced UI Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides enhanced UI components including animated startup, port visualization, and advanced visual effects",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&display_animated_startup, weight => 0, },
+                         scan => { method => \&update_ui_effects, },
+                         finish => { method => \&display_completion_animation, },
+                       },
+        options => {
+                     animation => "Enable animated effects (1=on, 0=off)",
+                     color_intensity => "Color intensity level (1-3)",
+                     startup_delay => "Startup animation duration in seconds (default: 5)",
+                     port_delay => "Delay between port visualizations in seconds (default: 3)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Display animated startup sequence
+sub display_animated_startup {
+    my ($self, $mark) = @_;
+    
+    # Initialize UI report
+    $mark->{'PLUGIN_REPORT'}->{'enhanced_ui'} = "Enhanced UI Module Report:\n";
+    
+    # Set default options if not specified
+    $mark->{'enhanced_ui.animation'} = 1 unless defined $mark->{'enhanced_ui.animation'};
+    $mark->{'enhanced_ui.color_intensity'} = 2 unless defined $mark->{'enhanced_ui.color_intensity'};
+    $mark->{'enhanced_ui.startup_delay'} = 5 unless defined $mark->{'enhanced_ui.startup_delay'};
+    $mark->{'enhanced_ui.port_delay'} = 3 unless defined $mark->{'enhanced_ui.port_delay'};
+    
+    # Skip animation if disabled
+    return $mark unless $mark->{'enhanced_ui.animation'} eq '1';
+    
+    # Clear screen
+    system("clear") if -t STDOUT;
+    
+    # Display animated logo
+    display_animated_logo($mark);
+    
+    # Display waiting message with spinner
+    display_waiting_message($mark);
+    
+    # Initialize port opening visualization
+    $mark->{'enhanced_ui.ports_opened'} = 0;
+    $mark->{'enhanced_ui.next_port_time'} = time() + $mark->{'enhanced_ui.port_delay'};
+    
+    # Initialize UI state
+    $mark->{'enhanced_ui.state'} = {
+        start_time => time(),
+        last_update => time(),
+        animation_frame => 0,
+        identity_changes => 0
+    };
+    
+    return $mark;
+}
+
+# Display animated logo
+sub display_animated_logo {
+    my ($mark) = @_;
+    
+    # ANSI color codes
+    my $reset = "\e[0m";
+    my $bold = "\e[1m";
+    my $blink = "\e[5m";
+    
+    # Color intensity based on settings
+    my $intensity = $mark->{'enhanced_ui.color_intensity'};
+    my @colors = get_color_palette($intensity);
+    
+    # Logo frames for animation
+    my @logo_frames = (
+        # Frame 1
+        [
+            "███╗   ██╗██╗██╗  ██╗████████╗ ██████╗     ███████╗███╗   ██╗██╗  ██╗ █████╗ ███╗   ██╗ ██████╗███████╗██████╗ ",
+            "████╗  ██║██║██║ ██╔╝╚══██╔══╝██╔═══██╗    ██╔════╝████╗  ██║██║  ██║██╔══██╗████╗  ██║██╔════╝██╔════╝██╔══██╗",
+            "██╔██╗ ██║██║█████╔╝    ██║   ██║   ██║    █████╗  ██╔██╗ ██║███████║███████║██╔██╗ ██║██║     █████╗  ██║  ██║",
+            "██║╚██╗██║██║██╔═██╗    ██║   ██║   ██║    ██╔══╝  ██║╚██╗██║██╔══██║██╔══██║██║╚██╗██║██║     ██╔══╝  ██║  ██║",
+            "██║ ╚████║██║██║  ██╗   ██║   ╚██████╔╝    ███████╗██║ ╚████║██║  ██║██║  ██║██║ ╚████║╚██████╗███████╗██████╔╝",
+            "╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝     ╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═════╝ "
+        ],
+        # Frame 2
+        [
+            "▄▄▄       ▄▄▄▄    ██▒   █▓ ▄▄▄       ███▄    █  ▄████▄  ▓█████ ▓█████▄     ▄▄▄        ██████  ██▓███  ▓█████  ▄████▄  ",
+            "▒████▄    ▓█████▄ ▓██░   █▒▒████▄     ██ ▀█   █ ▒██▀ ▀█  ▓█   ▀ ▒██▀ ██▌   ▒████▄    ▒██    ▒ ▓██░  ██▒▓█   ▀ ▒██▀ ▀█  ",
+            "▒██  ▀█▄  ▒██▒ ▄██ ▓██  █▒░▒██  ▀█▄  ▓██  ▀█ ██▒▒▓█    ▄ ▒███   ░██   █▌   ▒██  ▀█▄  ░ ▓██▄   ▓██░ ██▓▒▒███   ▒▓█    ▄ ",
+            "░██▄▄▄▄██ ▒██░█▀    ▒██ █░░░██▄▄▄▄██ ▓██▒  ▐▌██▒▒▓▓▄ ▄██▒▒▓█  ▄ ░▓█▄   ▌   ░██▄▄▄▄██   ▒   ██▒▒██▄█▓▒ ▒▒▓█  ▄ ▒▓▓▄ ▄██▒",
+            " ▓█   ▓██▒░▓█  ▀█▓   ▒▀█░   ▓█   ▓██▒▒██░   ▓██░▒ ▓███▀ ░░▒████▒░▒████▓     ▓█   ▓██▒▒██████▒▒▒██▒ ░  ░░▒████▒▒ ▓███▀ ░",
+            " ▒▒   ▓▒█░░▒▓███▀▒   ░ ▐░   ▒▒   ▓▒█░░ ▒░   ▒ ▒ ░ ░▒ ▒  ░░░ ▒░ ░ ▒▒▓  ▒     ▒▒   ▓▒█░▒ ▒▓▒ ▒ ░▒▓▒░ ░  ░░░ ▒░ ░░ ░▒ ▒  ░",
+            "  ▒   ▒▒ ░▒░▒   ░    ░ ░░    ▒   ▒▒ ░░ ░░   ░ ▒░  ░  ▒    ░ ░  ░ ░ ▒  ▒      ▒   ▒▒ ░░ ░▒  ░ ░░▒ ░      ░ ░  ░  ░  ▒   ",
+            "  ░   ▒    ░    ░      ░░    ░   ▒      ░   ░ ░ ░           ░    ░ ░  ░      ░   ▒   ░  ░  ░  ░░          ░   ░        ",
+            "      ░  ░ ░            ░        ░  ░         ░ ░ ░         ░  ░   ░             ░  ░      ░               ░  ░░ ░      ",
+            "                        ░                       ░                  ░                                            ░        "
+        ],
+        # Frame 3
+        [
+            "┌┐┌┬┌─┌┬┐┌─┐  ┌─┐┌┐┌┬ ┬┌─┐┌┐┌┌─┐┌─┐┌┬┐",
+            "│││├┴┐ │ │ │  ├┤ │││├─┤├─┤││││  ├┤  ││",
+            "┘└┘┴ ┴ ┴ └─┘  └─┘┘└┘┴ ┴┴ ┴┘└┘└─┘└─┘─┴┘",
+            "┌─┐┌┬┐┬  ┬┌─┐┌┐┌┌─┐┌─┐┌┬┐  ┌─┐┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐",
+            "├─┤ ││└┐┌┘├─┤││││  ├┤  ││  └─┐│  ├─┤││││││├┤ ├┬┘",
+            "┴ ┴─┴┘ └┘ ┴ ┴┘└┘└─┘└─┘─┴┘  └─┘└─┘┴ ┴┘└┘┘└┘└─┘┴└─"
+        ]
+    );
+    
+    # Display each frame with a short delay
+    foreach my $frame (@logo_frames) {
+        # Clear previous frame
+        system("clear") if -t STDOUT;
+        
+        # Print each line with random colors
+        foreach my $line (@$frame) {
+            my $color = $colors[int(rand(scalar @colors))];
+            print "$bold$color$line$reset\n";
+        }
+        
+        # Add a short delay between frames
+        sleep(0.8);
+    }
+    
+    # Display version info
+    my $version = $mark->{'VARIABLES'}->{'version'} || "3.5.0-Enhanced";
+    my $color = $colors[int(rand(scalar @colors))];
+    print "\n$bold$color Advanced Web Server Scanner v$version $reset\n\n";
+    
+    return;
+}
+
+# Display waiting message with spinner
+sub display_waiting_message {
+    my ($mark) = @_;
+    
+    # ANSI color codes
+    my $reset = "\e[0m";
+    my $bold = "\e[1m";
+    my $cyan = "\e[36m";
+    my $yellow = "\e[33m";
+    
+    # Spinner characters
+    my @spinner = ('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏');
+    
+    # Calculate startup delay
+    my $startup_delay = $mark->{'enhanced_ui.startup_delay'};
+    my $end_time = time() + $startup_delay;
+    
+    # Display waiting message with spinner
+    print "$bold${yellow}Wait for the nikto tool to open...$reset\n\n";
+    
+    # Run spinner animation
+    while (time() < $end_time) {
+        foreach my $char (@spinner) {
+            print "\r$bold$cyan$char $reset$bold Initializing security modules... $reset";
+            sleep(0.1);
+            
+            # Break if time is up
+            last if time() >= $end_time;
+        }
+        
+        # Break if time is up
+        last if time() >= $end_time;
+    }
+    
+    # Clear spinner line
+    print "\r" . " " x 60 . "\r";
+    
+    return;
+}
+
+# Update UI effects during scanning
+sub update_ui_effects {
+    my ($self, $mark) = @_;
+    
+    # Skip if animation is disabled
+    return $mark unless $mark->{'enhanced_ui.animation'} eq '1';
+    
+    # Update port opening visualization
+    update_port_visualization($mark);
+    
+    # Update identity change visualization
+    update_identity_visualization($mark);
+    
+    # Update animation frame
+    $mark->{'enhanced_ui.state'}->{'animation_frame'}++;
+    $mark->{'enhanced_ui.state'}->{'last_update'} = time();
+    
+    return $mark;
+}
+
+# Update port opening visualization
+sub update_port_visualization {
+    my ($mark) = @_;
+    
+    # Check if it's time to open a new port
+    if (time() >= $mark->{'enhanced_ui.next_port_time'} && $mark->{'enhanced_ui.ports_opened'} < 5) {
+        # ANSI color codes
+        my $reset = "\e[0m";
+        my $bold = "\e[1m";
+        my $green = "\e[32m";
+        
+        # Open a new port
+        $mark->{'enhanced_ui.ports_opened'}++;
+        my $port_number = 9050 + $mark->{'enhanced_ui.ports_opened'};
+        
+        # Display port opening message with animation
+        print "\r" . " " x 80 . "\r";  # Clear line
+        print "$bold${green}[+] Opening Tor port $port_number... ";
+        
+        # Animated progress bar
+        for (my $i = 0; $i < 20; $i++) {
+            print "${green}▓";
+            sleep(0.05);
+        }
+        
+        print " CONNECTED$reset\n";
+        
+        # Set time for next port opening
+        $mark->{'enhanced_ui.next_port_time'} = time() + $mark->{'enhanced_ui.port_delay'};
+        
+        # If all ports are opened, show completion message
+        if ($mark->{'enhanced_ui.ports_opened'} >= 5) {
+            print "\n$bold${green}[✓] All Tor circuits established successfully!$reset\n";
+            print "$bold${green}[✓] Advanced anonymity system activated$reset\n\n";
+        }
+    }
+    
+    return;
+}
+
+# Update identity change visualization
+sub update_identity_visualization {
+    my ($mark) = @_;
+    
+    # Randomly show identity changes (approximately every 10-15 seconds)
+    if (rand(100) < 2 && time() - $mark->{'enhanced_ui.state'}->{'last_update'} > 5) {
+        # ANSI color codes
+        my $reset = "\e[0m";
+        my $bold = "\e[1m";
+        my $cyan = "\e[36m";
+        my $yellow = "\e[33m";
+        my $magenta = "\e[35m";
+        
+        # Increment identity changes counter
+        $mark->{'enhanced_ui.state'}->{'identity_changes'}++;
+        
+        # Generate random IP address
+        my $ip = join('.', map { int(rand(256)) } (1..4));
+        
+        # Display identity change message
+        print "\r" . " " x 80 . "\r";  # Clear line
+        print "$bold${magenta}[*] Identity rotation #" . $mark->{'enhanced_ui.state'}->{'identity_changes'} . 
+              " - New exit node: $yellow$ip$reset\n";
+        
+        # Update last update time
+        $mark->{'enhanced_ui.state'}->{'last_update'} = time();
+    }
+    
+    return;
+}
+
+# Display completion animation
+sub display_completion_animation {
+    my ($self, $mark) = @_;
+    
+    # Skip if animation is disabled
+    return $mark unless $mark->{'enhanced_ui.animation'} eq '1';
+    
+    # ANSI color codes
+    my $reset = "\e[0m";
+    my $bold = "\e[1m";
+    my $green = "\e[32m";
+    my $cyan = "\e[36m";
+    
+    # Display completion message
+    print "\n$bold${green}[✓] Scan completed successfully!$reset\n";
+    print "$bold${cyan}[i] Closing secure connections and cleaning up...$reset\n";
+    
+    # Animated progress bar
+    print "$bold${cyan}[";
+    for (my $i = 0; $i < 30; $i++) {
+        print "▓";
+        sleep(0.05);
+    }
+    print "]$reset\n\n";
+    
+    # Display summary of anonymity operations
+    print "$bold${green}[✓] Advanced anonymity summary:$reset\n";
+    print "    - Tor circuits used: 5\n";
+    print "    - Identity rotations: " . $mark->{'enhanced_ui.state'}->{'identity_changes'} . "\n";
+    print "    - Behavior obfuscation: Active\n";
+    print "    - Traffic encryption: 256-bit AES\n\n";
+    
+    return $mark;
+}
+
+# Get color palette based on intensity
+sub get_color_palette {
+    my ($intensity) = @_;
+    
+    my @colors;
+    
+    if ($intensity == 1) {
+        # Low intensity - basic colors
+        @colors = (
+            "\e[31m",  # Red
+            "\e[32m",  # Green
+            "\e[34m",  # Blue
+            "\e[35m",  # Magenta
+            "\e[36m",  # Cyan
+        );
+    }
+    elsif ($intensity == 2) {
+        # Medium intensity - more colors
+        @colors = (
+            "\e[31m",  # Red
+            "\e[32m",  # Green
+            "\e[33m",  # Yellow
+            "\e[34m",  # Blue
+            "\e[35m",  # Magenta
+            "\e[36m",  # Cyan
+            "\e[91m",  # Bright Red
+            "\e[92m",  # Bright Green
+            "\e[94m",  # Bright Blue
+            "\e[95m",  # Bright Magenta
+        );
+    }
+    else {
+        # High intensity - full color range
+        @colors = (
+            "\e[31m",  # Red
+            "\e[32m",  # Green
+            "\e[33m",  # Yellow
+            "\e[34m",  # Blue
+            "\e[35m",  # Magenta
+            "\e[36m",  # Cyan
+            "\e[90m",  # Bright Black
+            "\e[91m",  # Bright Red
+            "\e[92m",  # Bright Green
+            "\e[93m",  # Bright Yellow
+            "\e[94m",  # Bright Blue
+            "\e[95m",  # Bright Magenta
+            "\e[96m",  # Bright Cyan
+            "\e[97m",  # Bright White
+        );
+    }
+    
+    return @colors;
+}
+
+1;

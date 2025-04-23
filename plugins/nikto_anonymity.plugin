@@ -1,0 +1,475 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto Anonymity Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds anonymity features to Nikto
+# including Tor network integration, multiple proxy support,
+# and behavior obfuscation techniques.
+#
+
+use strict;
+
+# Plugin register function
+sub nikto_anonymity_register {
+    my $id = { 
+        name        => "anonymity",
+        full_name   => "Anonymity Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides anonymity features including Tor network integration, multiple proxy support, and behavior obfuscation",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&setup_anonymity, weight => 5, },
+                         scan => { method => \&apply_anonymity, weight => 5, },
+                         postfetch => { method => \&rotate_identity, },
+                       },
+        options => {
+                     tor => "Enable Tor network for anonymity (1=on, 0=off)",
+                     tor_instances => "Number of Tor instances to use (default: 5)",
+                     tor_port_start => "Starting port for Tor instances (default: 9050)",
+                     proxies => "Enable proxy rotation (1=on, 0=off)",
+                     proxy_list => "File containing list of proxies (one per line)",
+                     proxy_auto_discover => "Automatically discover working proxies (1=on, 0=off)",
+                     proxy_count => "Number of proxies to use (default: 5)",
+                     obfuscate => "Enable behavior obfuscation (1=on, 0=off)",
+                     user_agent_rotate => "Rotate user agents (1=on, 0=off)",
+                     request_delay => "Random delay between requests in seconds (default: 0-2)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Setup anonymity features
+sub setup_anonymity {
+    my ($self, $mark) = @_;
+    
+    # Initialize anonymity report
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} = "Anonymity Module Report:\n";
+    
+    # Setup Tor if enabled
+    if (defined $mark->{'anonymity.tor'} && $mark->{'anonymity.tor'} eq '1') {
+        setup_tor($self, $mark);
+    }
+    
+    # Setup proxies if enabled
+    if (defined $mark->{'anonymity.proxies'} && $mark->{'anonymity.proxies'} eq '1') {
+        setup_proxies($self, $mark);
+    }
+    
+    # Setup behavior obfuscation if enabled
+    if (defined $mark->{'anonymity.obfuscate'} && $mark->{'anonymity.obfuscate'} eq '1') {
+        setup_obfuscation($self, $mark);
+    }
+    
+    return $mark;
+}
+
+# Setup Tor network
+sub setup_tor {
+    my ($self, $mark) = @_;
+    
+    # Get number of Tor instances
+    my $tor_instances = defined $mark->{'anonymity.tor_instances'} ? $mark->{'anonymity.tor_instances'} : 5;
+    $tor_instances = 5 if $tor_instances < 1 || $tor_instances > 10;  # Limit to reasonable range
+    
+    # Get starting port for Tor instances
+    my $tor_port_start = defined $mark->{'anonymity.tor_port_start'} ? $mark->{'anonymity.tor_port_start'} : 9050;
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Setting up $tor_instances Tor instances starting at port $tor_port_start\n";
+    
+    # Check if Tor is installed
+    my $tor_installed = check_tor_installed($self, $mark);
+    if (!$tor_installed) {
+        $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: Tor is not installed. Please install Tor before using this feature.\n";
+        $mark->{'anonymity.tor'} = 0;  # Disable Tor
+        return;
+    }
+    
+    # Initialize Tor instances array
+    $mark->{'anonymity.tor_instances_array'} = [];
+    
+    # Start Tor instances
+    for my $i (0..$tor_instances-1) {
+        my $port = $tor_port_start + $i;
+        my $control_port = $port + 10000;  # Control port is 10000 higher than SOCKS port
+        my $data_dir = "/tmp/tor_nikto_$port";
+        
+        # Create data directory
+        unless (-d $data_dir) {
+            mkdir $data_dir or do {
+                $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: Could not create Tor data directory $data_dir: $!\n";
+                next;
+            };
+        }
+        
+        # Create torrc file
+        my $torrc = "$data_dir/torrc";
+        open(my $torrc_fh, ">", $torrc) or do {
+            $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: Could not create Tor config file $torrc: $!\n";
+            next;
+        };
+        
+        print $torrc_fh "SocksPort $port\n";
+        print $torrc_fh "ControlPort $control_port\n";
+        print $torrc_fh "DataDirectory $data_dir\n";
+        print $torrc_fh "CookieAuthentication 1\n";
+        print $torrc_fh "ExitRelay 0\n";
+        print $torrc_fh "ExitPolicy reject *:*\n";
+        close($torrc_fh);
+        
+        # Start Tor instance
+        my $tor_cmd = "tor -f $torrc > $data_dir/tor.log 2>&1 &";
+        system($tor_cmd);
+        
+        # Wait for Tor to start
+        sleep 5;
+        
+        # Check if Tor is running
+        my $tor_running = check_tor_running($self, $mark, $port);
+        if ($tor_running) {
+            $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Tor instance started on port $port\n";
+            push(@{$mark->{'anonymity.tor_instances_array'}}, { port => $port, control_port => $control_port, data_dir => $data_dir });
+        }
+        else {
+            $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: Could not start Tor instance on port $port\n";
+        }
+    }
+    
+    # Check if we have any running Tor instances
+    if (scalar @{$mark->{'anonymity.tor_instances_array'}} == 0) {
+        $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: No Tor instances could be started. Disabling Tor.\n";
+        $mark->{'anonymity.tor'} = 0;  # Disable Tor
+        return;
+    }
+    
+    # Set current Tor instance to the first one
+    $mark->{'anonymity.current_tor_instance'} = 0;
+    
+    # Apply the first Tor instance to LW2
+    apply_tor_to_lw2($self, $mark);
+    
+    return;
+}
+
+# Check if Tor is installed
+sub check_tor_installed {
+    my ($self, $mark) = @_;
+    
+    # Try to run tor --version
+    my $tor_version = `tor --version 2>/dev/null`;
+    
+    return ($tor_version =~ /Tor\s+version/i);
+}
+
+# Check if Tor is running on the specified port
+sub check_tor_running {
+    my ($self, $mark, $port) = @_;
+    
+    # Try to connect to the Tor SOCKS port
+    my $nc_cmd = "nc -z localhost $port 2>/dev/null";
+    my $nc_result = system($nc_cmd);
+    
+    return ($nc_result == 0);
+}
+
+# Apply current Tor instance to LW2
+sub apply_tor_to_lw2 {
+    my ($self, $mark) = @_;
+    
+    # Get current Tor instance
+    my $instance_index = $mark->{'anonymity.current_tor_instance'};
+    my $instance = $mark->{'anonymity.tor_instances_array'}->[$instance_index];
+    
+    # Set LW2 proxy settings
+    LW2::http_init_proxy("localhost", $instance->{'port'}, "socks5");
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Applied Tor instance on port " . $instance->{'port'} . " to LW2\n";
+    
+    return;
+}
+
+# Setup proxies
+sub setup_proxies {
+    my ($self, $mark) = @_;
+    
+    # Get number of proxies to use
+    my $proxy_count = defined $mark->{'anonymity.proxy_count'} ? $mark->{'anonymity.proxy_count'} : 5;
+    $proxy_count = 5 if $proxy_count < 1 || $proxy_count > 20;  # Limit to reasonable range
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Setting up $proxy_count proxies\n";
+    
+    # Initialize proxies array
+    $mark->{'anonymity.proxies_array'} = [];
+    
+    # Load proxies from file if specified
+    if (defined $mark->{'anonymity.proxy_list'} && -f $mark->{'anonymity.proxy_list'}) {
+        load_proxies_from_file($self, $mark, $mark->{'anonymity.proxy_list'});
+    }
+    
+    # Auto-discover proxies if enabled and we don't have enough
+    if (defined $mark->{'anonymity.proxy_auto_discover'} && 
+        $mark->{'anonymity.proxy_auto_discover'} eq '1' && 
+        scalar @{$mark->{'anonymity.proxies_array'}} < $proxy_count) {
+        
+        discover_proxies($self, $mark, $proxy_count - scalar @{$mark->{'anonymity.proxies_array'}});
+    }
+    
+    # Check if we have any proxies
+    if (scalar @{$mark->{'anonymity.proxies_array'}} == 0) {
+        $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: No proxies available. Disabling proxy rotation.\n";
+        $mark->{'anonymity.proxies'} = 0;  # Disable proxies
+        return;
+    }
+    
+    # Set current proxy to the first one
+    $mark->{'anonymity.current_proxy'} = 0;
+    
+    # Apply the first proxy to LW2 if Tor is not enabled
+    if (!defined $mark->{'anonymity.tor'} || $mark->{'anonymity.tor'} ne '1') {
+        apply_proxy_to_lw2($self, $mark);
+    }
+    
+    return;
+}
+
+# Load proxies from file
+sub load_proxies_from_file {
+    my ($self, $mark, $file) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Loading proxies from file: $file\n";
+    
+    # Open the file
+    open(my $fh, "<", $file) or do {
+        $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "ERROR: Could not open proxy list file $file: $!\n";
+        return;
+    };
+    
+    # Read proxies
+    while (my $line = <$fh>) {
+        chomp $line;
+        $line =~ s/^\s+|\s+$//g;  # Trim whitespace
+        
+        # Skip empty lines and comments
+        next if $line eq '' || $line =~ /^#/;
+        
+        # Parse proxy line (format: type:host:port or host:port)
+        my ($type, $host, $port);
+        if ($line =~ /^(http|https|socks4|socks5):\/\/([^:]+):(\d+)$/i) {
+            $type = lc($1);
+            $host = $2;
+            $port = $3;
+        }
+        elsif ($line =~ /^([^:]+):(\d+)$/i) {
+            $type = 'http';  # Default to HTTP
+            $host = $1;
+            $port = $2;
+        }
+        else {
+            $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "WARNING: Invalid proxy format: $line\n";
+            next;
+        }
+        
+        # Add proxy to the array
+        push(@{$mark->{'anonymity.proxies_array'}}, { type => $type, host => $host, port => $port });
+    }
+    
+    close($fh);
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Loaded " . scalar @{$mark->{'anonymity.proxies_array'}} . " proxies from file\n";
+    
+    return;
+}
+
+# Discover proxies automatically
+sub discover_proxies {
+    my ($self, $mark, $count) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Auto-discovering $count proxies\n";
+    
+    # This is a placeholder for proxy auto-discovery
+    # In a real implementation, this would fetch proxies from public proxy lists
+    # For now, we'll add some example proxies
+    
+    my @example_proxies = (
+        { type => 'http', host => 'proxy1.example.com', port => 8080 },
+        { type => 'http', host => 'proxy2.example.com', port => 8080 },
+        { type => 'http', host => 'proxy3.example.com', port => 8080 },
+        { type => 'socks5', host => 'proxy4.example.com', port => 1080 },
+        { type => 'socks5', host => 'proxy5.example.com', port => 1080 }
+    );
+    
+    # Add example proxies up to the requested count
+    for my $i (0..min($count-1, $#example_proxies)) {
+        push(@{$mark->{'anonymity.proxies_array'}}, $example_proxies[$i]);
+    }
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Added " . min($count, scalar @example_proxies) . " example proxies\n";
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "NOTE: In a real implementation, this would fetch actual working proxies from public proxy lists\n";
+    
+    return;
+}
+
+# Apply current proxy to LW2
+sub apply_proxy_to_lw2 {
+    my ($self, $mark) = @_;
+    
+    # Get current proxy
+    my $proxy_index = $mark->{'anonymity.current_proxy'};
+    my $proxy = $mark->{'anonymity.proxies_array'}->[$proxy_index];
+    
+    # Set LW2 proxy settings
+    LW2::http_init_proxy($proxy->{'host'}, $proxy->{'port'}, $proxy->{'type'});
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Applied proxy " . $proxy->{'host'} . ":" . $proxy->{'port'} . " (" . $proxy->{'type'} . ") to LW2\n";
+    
+    return;
+}
+
+# Setup behavior obfuscation
+sub setup_obfuscation {
+    my ($self, $mark) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Setting up behavior obfuscation\n";
+    
+    # Setup user agent rotation if enabled
+    if (defined $mark->{'anonymity.user_agent_rotate'} && $mark->{'anonymity.user_agent_rotate'} eq '1') {
+        setup_user_agent_rotation($self, $mark);
+    }
+    
+    # Setup request delay
+    my $request_delay = defined $mark->{'anonymity.request_delay'} ? $mark->{'anonymity.request_delay'} : '0-2';
+    if ($request_delay =~ /^(\d+)-(\d+)$/) {
+        $mark->{'anonymity.request_delay_min'} = $1;
+        $mark->{'anonymity.request_delay_max'} = $2;
+    }
+    else {
+        $mark->{'anonymity.request_delay_min'} = 0;
+        $mark->{'anonymity.request_delay_max'} = 2;
+    }
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "Request delay set to " . $mark->{'anonymity.request_delay_min'} . "-" . $mark->{'anonymity.request_delay_max'} . " seconds\n";
+    
+    return;
+}
+
+# Setup user agent rotation
+sub setup_user_agent_rotation {
+    my ($self, $mark) = @_;
+    
+    # Define a list of common user agents
+    my @user_agents = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/77.0.4054.203"
+    );
+    
+    # Store user agents in mark
+    $mark->{'anonymity.user_agents'} = \@user_agents;
+    
+    # Set initial user agent
+    $mark->{'anonymity.current_user_agent'} = int(rand(scalar @user_agents));
+    
+    $mark->{'PLUGIN_REPORT'}->{'anonymity'} .= "User agent rotation enabled with " . scalar @user_agents . " user agents\n";
+    
+    return;
+}
+
+# Apply anonymity features during scanning
+sub apply_anonymity {
+    my ($self, $mark) = @_;
+    
+    # Apply user agent rotation if enabled
+    if (defined $mark->{'anonymity.user_agent_rotate'} && $mark->{'anonymity.user_agent_rotate'} eq '1') {
+        rotate_user_agent($self, $mark);
+    }
+    
+    # Apply request delay if enabled
+    if (defined $mark->{'anonymity.request_delay_min'} && defined $mark->{'anonymity.request_delay_max'}) {
+        my $delay = $mark->{'anonymity.request_delay_min'} + rand($mark->{'anonymity.request_delay_max'} - $mark->{'anonymity.request_delay_min'});
+        sleep($delay) if $delay > 0;
+    }
+    
+    return $mark;
+}
+
+# Rotate user agent
+sub rotate_user_agent {
+    my ($self, $mark) = @_;
+    
+    # Get user agents array
+    my $user_agents = $mark->{'anonymity.user_agents'};
+    
+    # Rotate to next user agent
+    $mark->{'anonymity.current_user_agent'} = ($mark->{'anonymity.current_user_agent'} + 1) % scalar @$user_agents;
+    
+    # Set the user agent in LW2
+    my $user_agent = $user_agents->[$mark->{'anonymity.current_user_agent'}];
+    LW2::http_set_useragent($user_agent);
+    
+    return;
+}
+
+# Rotate identity after each request
+sub rotate_identity {
+    my ($self, $mark) = @_;
+    
+    # Only rotate every few requests to avoid excessive rotation
+    $mark->{'anonymity.request_count'} = 0 unless defined $mark->{'anonymity.request_count'};
+    $mark->{'anonymity.request_count'}++;
+    
+    # Rotate every 5 requests
+    return unless $mark->{'anonymity.request_count'} % 5 == 0;
+    
+    # Rotate Tor identity if Tor is enabled
+    if (defined $mark->{'anonymity.tor'} && $mark->{'anonymity.tor'} eq '1') {
+        rotate_tor_identity($self, $mark);
+    }
+    # Otherwise rotate proxy if proxies are enabled
+    elsif (defined $mark->{'anonymity.proxies'} && $mark->{'anonymity.proxies'} eq '1') {
+        rotate_proxy($self, $mark);
+    }
+    
+    return $mark;
+}
+
+# Rotate Tor identity
+sub rotate_tor_identity {
+    my ($self, $mark) = @_;
+    
+    # Rotate to next Tor instance
+    $mark->{'anonymity.current_tor_instance'} = ($mark->{'anonymity.current_tor_instance'} + 1) % scalar @{$mark->{'anonymity.tor_instances_array'}};
+    
+    # Apply the new Tor instance to LW2
+    apply_tor_to_lw2($self, $mark);
+    
+    return;
+}
+
+# Rotate proxy
+sub rotate_proxy {
+    my ($self, $mark) = @_;
+    
+    # Rotate to next proxy
+    $mark->{'anonymity.current_proxy'} = ($mark->{'anonymity.current_proxy'} + 1) % scalar @{$mark->{'anonymity.proxies_array'}};
+    
+    # Apply the new proxy to LW2
+    apply_proxy_to_lw2($self, $mark);
+    
+    return;
+}
+
+# Helper function to get minimum of two numbers
+sub min {
+    my ($a, $b) = @_;
+    return $a < $b ? $a : $b;
+}
+
+1;

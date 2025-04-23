@@ -1,0 +1,225 @@
+###############################################################################
+#  Copyright (C) 2025 Manus AI
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to
+#  Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+###############################################################################
+# PURPOSE:
+# إضافة للكشف عن ثغرات واجهات برمجة التطبيقات (API)
+###############################################################################
+
+sub nikto_api_init {
+    my $id = { name        => "nikto_api",
+               full_name   => "فحص ثغرات واجهات برمجة التطبيقات (API)",
+               author      => "Manus AI",
+               description => "يبحث عن ثغرات أمنية في واجهات برمجة التطبيقات (API) بما في ذلك REST وGraphQL",
+               hooks       => {
+                   scan => { method => \&nikto_api_scan, },
+                   start => { method => \&nikto_api_load, },
+               },
+               copyright => "2025 Manus AI",
+               options   => {
+                   api_scan => "تفعيل فحص ثغرات API",
+               }
+    };
+    return $id;
+}
+
+sub nikto_api_load {
+    # تحميل قاعدة بيانات API
+    my ($mark) = @_;
+    my $dbfile = "$VARIABLES{'PLUGINDIR'}/../databases/db_api.db";
+    
+    if (-f $dbfile) {
+        open(my $DB, "<", $dbfile) || die print STDERR "+ ERROR: Unable to open $dbfile: $!\n";
+        my @DBDATA = <$DB>;
+        close($DB);
+        
+        # تحميل قاعدة البيانات
+        foreach my $line (@DBDATA) {
+            $line =~ s/\#.*$//;
+            if ($line =~ /^"([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]+)","([^"]*)",(?:"([^"]*)")?,"([^"]+)","([^"]+)","([^"]+)","([^"]*)"/) {
+                my ($id, $variables, $tuning, $method, $uri, $data, $headers, $expected, $message, $solution, $reference) = ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+                
+                # تخزين البيانات في مصفوفة TESTS
+                $TESTS{$id} = {
+                    "ID"        => $id,
+                    "OSVDB"     => "",
+                    "NAME"      => $message,
+                    "METHOD"    => $method,
+                    "URI"       => $uri,
+                    "DATA"      => $data,
+                    "HEADERS"   => $headers,
+                    "EXPECTED"  => $expected,
+                    "MATCH"     => "",
+                    "NOMATCH"   => "",
+                    "TUNING"    => $tuning,
+                    "FUNCTION"  => \&nikto_api_check,
+                    "ARGS"      => { solution => $solution, reference => $reference },
+                    "VARIABLES" => $variables
+                };
+            }
+        }
+        nprint("+ تم تحميل قاعدة بيانات واجهات برمجة التطبيقات (API)");
+    }
+    else {
+        nprint("+ تحذير: لم يتم العثور على قاعدة بيانات API: $dbfile");
+    }
+}
+
+sub nikto_api_scan {
+    my ($mark) = @_;
+    
+    # فحص ما إذا كان الخيار مفعل
+    return if ($CLI{'api_scan'} eq "0");
+    
+    nprint("+ بدء فحص ثغرات واجهات برمجة التطبيقات (API)");
+    
+    # اكتشاف نقاط نهاية API المحتملة
+    discover_api_endpoints($mark);
+    
+    # تنفيذ الاختبارات من قاعدة البيانات
+    foreach my $test (keys %TESTS) {
+        if ($test =~ /^95\d+$/) {  # اختبارات API تبدأ بـ 95
+            my $mark_copy = $mark;
+            run_test($mark_copy, $test);
+        }
+    }
+    
+    # فحص GraphQL إذا تم اكتشافه
+    if (detect_graphql($mark)) {
+        nprint("+ تم اكتشاف GraphQL، جاري تنفيذ اختبارات خاصة");
+        test_graphql($mark);
+    }
+}
+
+sub discover_api_endpoints {
+    my ($mark) = @_;
+    
+    # قائمة بالمسارات الشائعة لنقاط نهاية API
+    my @common_api_paths = (
+        "/api",
+        "/api/v1",
+        "/api/v2",
+        "/v1",
+        "/v2",
+        "/graphql",
+        "/graphiql",
+        "/swagger",
+        "/swagger-ui.html",
+        "/api-docs",
+        "/openapi.json",
+        "/swagger.json"
+    );
+    
+    nprint("+ البحث عن نقاط نهاية API المحتملة");
+    
+    foreach my $path (@common_api_paths) {
+        my ($res, $content, $error, $request, $response) = nfetch($mark, $path, "GET", "", "", "", "discover_api");
+        
+        if ($res && $res->code != 404) {
+            nprint("+ تم اكتشاف نقطة نهاية API محتملة: $path (الرمز: " . $res->code . ")");
+            
+            # تحليل الاستجابة للكشف عن نوع API
+            if ($content =~ /{".*}/ || $response->{'headers'} =~ /application\/json/) {
+                nprint("+ يبدو أنها واجهة REST API");
+            }
+        }
+    }
+}
+
+sub detect_graphql {
+    my ($mark) = @_;
+    
+    # فحص مسارات GraphQL الشائعة
+    my @graphql_paths = (
+        "/graphql",
+        "/graphiql",
+        "/graphql/console",
+        "/graphql/playground",
+        "/api/graphql"
+    );
+    
+    foreach my $path (@graphql_paths) {
+        my ($res, $content, $error, $request, $response) = nfetch($mark, $path, "GET", "", "", "", "detect_graphql");
+        
+        if ($res && $res->code != 404) {
+            if ($content =~ /graphql|GraphQL|schema|query|mutation/ || $response->{'headers'} =~ /application\/graphql/) {
+                return 1;
+            }
+        }
+    }
+    
+    # محاولة استعلام التأمل الذاتي
+    my $introspection_query = '{"query":"{__schema{types{name}}}"}';
+    my $headers = "Content-Type: application/json";
+    
+    my ($res, $content, $error, $request, $response) = nfetch($mark, "/graphql", "POST", $introspection_query, $headers, "", "detect_graphql");
+    
+    if ($res && $content =~ /"data".*"__schema"/) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+sub test_graphql {
+    my ($mark) = @_;
+    
+    # استعلام التأمل الذاتي لاستخراج المخطط
+    my $introspection_query = '{"query":"query IntrospectionQuery {__schema {queryType {name} mutationType {name} subscriptionType {name} types {kind name description fields(includeDeprecated:true){name description args{name description type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}} type{kind name ofType{kind name ofType{kind name ofType{kind name}}}}}}}}"}';
+    my $headers = "Content-Type: application/json";
+    
+    my ($res, $content, $error, $request, $response) = nfetch($mark, "/graphql", "POST", $introspection_query, $headers, "", "test_graphql");
+    
+    if ($res && $content =~ /"data".*"__schema"/) {
+        nprint("+ تم اكتشاف استعلام التأمل الذاتي لـ GraphQL مفعل، وهذا قد يكشف معلومات حساسة عن مخطط API");
+        add_vulnerability($mark, "950100", "استعلام التأمل الذاتي لـ GraphQL مفعل", "/graphql", "POST", "يمكن أن يكشف معلومات حساسة عن مخطط API", "قم بتعطيل استعلامات التأمل الذاتي في بيئة الإنتاج", "OWASP API3:2019");
+    }
+}
+
+sub nikto_api_check {
+    my ($mark, $result, $request, $response, $args) = @_;
+    
+    # إضافة معلومات إضافية للنتائج
+    if ($result) {
+        $result->{'message'} .= " - الحل: " . $args->{'solution'} if ($args->{'solution'});
+        $result->{'message'} .= " - المرجع: " . $args->{'reference'} if ($args->{'reference'});
+    }
+    
+    return $result;
+}
+
+# إضافة ثغرة جديدة إلى النتائج
+sub add_vulnerability {
+    my ($mark, $id, $name, $uri, $method, $message, $solution, $reference) = @_;
+    
+    my %result;
+    $result{'nikto_id'} = $id;
+    $result{'message'} = $message;
+    $result{'method'} = $method;
+    $result{'uri'} = $uri;
+    
+    # إضافة معلومات إضافية
+    $result{'message'} .= " - الحل: $solution" if ($solution);
+    $result{'message'} .= " - المرجع: $reference" if ($reference);
+    
+    # إضافة النتيجة إلى مصفوفة النتائج
+    push(@RESULTS, \%result);
+    
+    # طباعة النتيجة
+    nprint("+ " . $result{'message'} . " ($uri)");
+}
+
+1;

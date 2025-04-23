@@ -1,0 +1,107 @@
+#!/usr/bin/perl
+#
+# Enhanced CLI Interface for Nikto
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds additional command line options to Nikto
+# to support the enhanced features and integrates with the new scripts
+
+package nikto_enhanced_cli;
+use strict;
+
+# Plugin register function
+sub nikto_enhanced_cli_register {
+    my $id = { 
+        name        => "enhanced_cli",
+        full_name   => "Enhanced CLI Interface",
+        author      => "Enhanced Nikto Project",
+        description => "Adds additional command line options for enhanced features",
+        version     => "1.0",
+        hooks       => {
+                         cli => { method => \&enhanced_cli_options, },
+                       },
+    };
+    
+    return $id;
+}
+
+# Enhanced CLI options
+sub enhanced_cli_options {
+    my ($self, $options) = @_;
+    
+    # Add enhanced options to CLI
+    $options->{'python-scan'} = "Enable advanced Python scanning module";
+    $options->{'go-evasion'} = "Enable advanced Go evasion module";
+    $options->{'bash-stealth'} = "Enable advanced Bash stealth module";
+    
+    # Python scanner options
+    $options->{'python-threads'} = "Number of threads for Python scanner (default: 10)";
+    $options->{'python-delay'} = "Delay between requests for Python scanner (default: 0)";
+    $options->{'python-timeout'} = "Timeout for Python scanner requests (default: 10)";
+    $options->{'python-proxy'} = "Proxy to use for Python scanner (e.g., http://127.0.0.1:8080)";
+    $options->{'python-paths'} = "File containing paths to scan with Python scanner";
+    $options->{'python-payloads'} = "File containing custom payloads for Python scanner";
+    
+    # Go evasion options
+    $options->{'go-threads'} = "Number of threads for Go evasion module (default: 10)";
+    $options->{'go-delay'} = "Delay between requests for Go evasion module (default: 0)";
+    $options->{'go-timeout'} = "Timeout for Go evasion module requests (default: 10)";
+    $options->{'go-proxy'} = "Proxy to use for Go evasion module (e.g., http://127.0.0.1:8080)";
+    $options->{'go-paths'} = "File containing paths to scan with Go evasion module";
+    $options->{'go-payloads'} = "File containing custom payloads for Go evasion module";
+    
+    # Bash stealth options
+    $options->{'bash-tor'} = "Enable Tor for Bash stealth module";
+    $options->{'bash-random-mac'} = "Enable random MAC address spoofing for Bash stealth module";
+    $options->{'bash-dns-randomization'} = "Enable DNS query randomization for Bash stealth module";
+    $options->{'bash-traffic-padding'} = "Enable traffic padding for Bash stealth module";
+    $options->{'bash-timing-randomization'} = "Enable timing randomization for Bash stealth module";
+    $options->{'bash-log-cleaning'} = "Enable log cleaning for Bash stealth module";
+    $options->{'bash-memory-cleaning'} = "Enable memory cleaning for Bash stealth module";
+    $options->{'bash-proxy-chains'} = "Enable proxy chains for Bash stealth module";
+    $options->{'bash-proxy-chain-length'} = "Number of proxies in chain for Bash stealth module (default: 3)";
+    
+    # Advanced WAF bypass options
+    $options->{'waf-detect'} = "Enable WAF detection";
+    $options->{'waf-bypass'} = "Enable WAF bypass techniques";
+    $options->{'waf-fingerprint'} = "Fingerprint WAF before scanning";
+    $options->{'waf-evasion-level'} = "WAF evasion level (1-5, default: 3)";
+    
+    # Advanced IDS/IPS bypass options
+    $options->{'ids-detect'} = "Enable IDS/IPS detection";
+    $options->{'ids-bypass'} = "Enable IDS/IPS bypass techniques";
+    $options->{'ids-evasion-level'} = "IDS/IPS evasion level (1-5, default: 3)";
+    
+    # Snort3 specific bypass options
+    $options->{'snort3-bypass'} = "Enable Snort3 specific bypass techniques";
+    $options->{'snort3-evasion-level'} = "Snort3 evasion level (1-5, default: 3)";
+    
+    # Enhanced scanning options
+    $options->{'vuln2025'} = "Enable scanning for 2025 vulnerabilities";
+    $options->{'extended-db'} = "Enable extended vulnerability database (300 rules)";
+    $options->{'custom-rules'} = "File containing custom vulnerability rules";
+    
+    # Enhanced UI options
+    $options->{'color-scheme'} = "Color scheme to use (cyber, desert, neon, midnight, blood)";
+    $options->{'color-intensity'} = "Color intensity (1-3, default: 2)";
+    $options->{'english-only'} = "Force English-only interface";
+    $options->{'startup-animation'} = "Enable startup animation";
+    $options->{'progress-bar'} = "Enable progress bar";
+    $options->{'results-chart'} = "Enable results chart";
+    
+    # Enhanced reporting options
+    $options->{'report-template'} = "Custom report template file";
+    $options->{'report-logo'} = "Custom logo for HTML reports";
+    $options->{'report-company'} = "Company name for reports";
+    $options->{'report-author'} = "Author name for reports";
+    
+    # Enhanced anonymity options
+    $options->{'anonymity-level'} = "Anonymity level (1-5, default: 3)";
+    $options->{'tor-proxy'} = "Tor proxy to use (default: 127.0.0.1:9050)";
+    $options->{'identity-rotation'} = "Enable identity rotation";
+    $options->{'rotation-interval'} = "Identity rotation interval in seconds (default: 300)";
+    
+    return $options;
+}
+
+1;

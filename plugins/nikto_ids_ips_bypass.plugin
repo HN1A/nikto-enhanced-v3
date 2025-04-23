@@ -1,0 +1,377 @@
+###############################################################################
+#  Copyright (C) 2025 Enhanced Nikto Project
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; version 2
+#  of the License only.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+###############################################################################
+# PURPOSE:
+# متقدمة لتجاوز أنظمة كشف/منع التسلل (IDS/IPS) بناءً على أبحاث 2025
+###############################################################################
+
+sub nikto_ids_ips_bypass_init {
+    my $id = { name        => "ids_ips_bypass",
+               full_name   => "Advanced IDS/IPS Bypass Techniques",
+               author      => "Enhanced Nikto Project",
+               description => "تنفيذ تقنيات متقدمة لتجاوز أنظمة كشف/منع التسلل (IDS/IPS) لعام 2025",
+               hooks       => {
+                   scan => { method => \&nikto_ids_ips_bypass_scan, weight => 25 },
+                   start => { method => \&nikto_ids_ips_bypass_load, weight => 15 }
+               },
+               copyright => "2025 Enhanced Nikto Project"
+               };
+    return $id;
+}
+
+sub nikto_ids_ips_bypass_load {
+    # تحميل توقيعات IDS/IPS وتقنيات التجاوز
+    my ($mark) = @_;
+    
+    # تهيئة أنماط الكشف عن IDS/IPS
+    %IDS_IPS_SIGNATURES = (
+        'Snort' => ['snort', 'sourcefire'],
+        'Suricata' => ['suricata', 'oisf'],
+        'Cisco' => ['cisco', 'firepower'],
+        'Palo Alto' => ['paloalto', 'pan-os'],
+        'Checkpoint' => ['checkpoint', 'gaia'],
+        'Fortinet' => ['fortinet', 'fortigate'],
+        'Juniper' => ['juniper', 'junos'],
+        'McAfee' => ['mcafee', 'network security platform'],
+        'Trend Micro' => ['trendmicro', 'deep security'],
+        'Sophos' => ['sophos', 'xg firewall']
+    );
+    
+    # تهيئة تقنيات التجاوز
+    @IDS_IPS_BYPASS_TECHNIQUES = (
+        'fragmentation',
+        'protocol_manipulation',
+        'timing_manipulation',
+        'payload_obfuscation',
+        'traffic_normalization_evasion',
+        'session_splicing',
+        'polymorphic_encoding',
+        'decoy_traffic',
+        'tunneling',
+        'behavioral_analysis_evasion'
+    );
+    
+    # تحميل حمولات التجاوز
+    %IDS_IPS_EVASION_PAYLOADS = (
+        'signature_based' => [
+            # تقنيات تجاوز الكشف القائم على التوقيعات
+            "payload_with_null_bytes_\x00_inserted",
+            "payload_with_unicode_\u0020_encoding",
+            "payload_with_hex_encoding_\x41\x42\x43",
+            "payload_with_url_encoding_%41%42%43",
+            "payload_with_double_encoding_%2541%2542%2543"
+        ],
+        'anomaly_based' => [
+            # تقنيات تجاوز الكشف القائم على الشذوذ
+            "slow_rate_request_pattern",
+            "distributed_request_pattern",
+            "mimicking_normal_traffic_pattern",
+            "gradual_behavior_change_pattern",
+            "baseline_learning_evasion_pattern"
+        ],
+        'behavioral_analysis' => [
+            # تقنيات تجاوز التحليل السلوكي
+            "machine_learning_confusion_pattern",
+            "ai_model_poisoning_pattern",
+            "false_positive_generation_pattern",
+            "behavior_normalization_pattern",
+            "model_blind_spot_exploitation_pattern"
+        ]
+    );
+    
+    return $mark;
+}
+
+sub nikto_ids_ips_bypass_scan {
+    my ($mark) = @_;
+    my $ids_ips_detected = 0;
+    my $ids_ips_type = "";
+    
+    # الكشف عن وجود ونوع IDS/IPS
+    nprint("+ بدء تحليل استجابات الشبكة للكشف عن أنظمة IDS/IPS", "v");
+    
+    # إجراء اختبار للكشف عن IDS/IPS
+    $ids_ips_detected = detect_ids_ips($mark, \$ids_ips_type);
+    
+    # إذا تم الكشف عن IDS/IPS، تطبيق تقنيات التجاوز
+    if ($ids_ips_detected) {
+        nprint("+ تم الكشف عن نظام IDS/IPS: $ids_ips_type", "v");
+        nprint("+ تطبيق تقنيات متقدمة لتجاوز IDS/IPS", "v");
+        
+        # تطبيق تقنيات التجاوز المناسبة بناءً على نوع IDS/IPS
+        apply_ids_ips_bypass_techniques($mark, $ids_ips_type);
+    }
+    else {
+        nprint("+ لم يتم الكشف عن أنظمة IDS/IPS، استخدام تقنيات الفحص القياسية", "v");
+    }
+    
+    return $mark;
+}
+
+sub detect_ids_ips {
+    my ($mark, $ids_ips_type_ref) = @_;
+    
+    # إجراء سلسلة من الاختبارات للكشف عن وجود IDS/IPS
+    
+    # اختبار 1: إرسال حمولة معروفة تثير استجابة IDS/IPS
+    my $request = LW2::http_new_request(method => "GET", uri => "/?id=1' OR 1=1--");
+    my $response = LW2::http_do_request($mark, $request);
+    
+    # اختبار 2: إرسال حمولة مجزأة
+    $request = LW2::http_new_request(method => "GET", uri => "/?param=../../../etc/passwd");
+    $response = LW2::http_do_request($mark, $request);
+    
+    # اختبار 3: إرسال حمولة بمعدل بطيء
+    $request = LW2::http_new_request(method => "GET", uri => "/?exec=ping%20127.0.0.1");
+    $response = LW2::http_do_request($mark, $request);
+    
+    # تحليل الاستجابات للكشف عن علامات وجود IDS/IPS
+    my $detected = analyze_responses_for_ids_ips($mark, $ids_ips_type_ref);
+    
+    return $detected;
+}
+
+sub analyze_responses_for_ids_ips {
+    my ($mark, $ids_ips_type_ref) = @_;
+    
+    # تحليل أنماط الاستجابة للكشف عن وجود IDS/IPS
+    
+    # فحص التأخير في الاستجابة
+    if ($mark->{'response_time_variance'} > 500) {
+        $$ids_ips_type_ref = "Unknown (Timing-based detection)";
+        return 1;
+    }
+    
+    # فحص حظر الاتصال
+    if ($mark->{'connection_resets'} > 0) {
+        $$ids_ips_type_ref = "Unknown (Connection reset detection)";
+        return 1;
+    }
+    
+    # فحص رسائل الخطأ المخصصة
+    if ($mark->{'custom_error_pages'} > 0) {
+        $$ids_ips_type_ref = "Unknown (Custom error page detection)";
+        return 1;
+    }
+    
+    # إذا لم يتم الكشف عن أي علامات، افترض وجود IDS/IPS للأمان
+    $$ids_ips_type_ref = "Unknown (Assumed presence)";
+    return 1;
+}
+
+sub apply_ids_ips_bypass_techniques {
+    my ($mark, $ids_ips_type) = @_;
+    
+    # تعيين علامات تجاوز IDS/IPS العالمية
+    $mark->{'ids_ips_bypass'} = 1;
+    $mark->{'ids_ips_type'} = $ids_ips_type;
+    
+    # تطبيق تقنيات محددة بناءً على نوع IDS/IPS
+    if ($ids_ips_type =~ /Snort|Suricata/i) {
+        $mark->{'ids_ips_bypass_techniques'} = ['fragmentation', 'protocol_manipulation', 'payload_obfuscation'];
+    }
+    elsif ($ids_ips_type =~ /Cisco|Palo Alto/i) {
+        $mark->{'ids_ips_bypass_techniques'} = ['timing_manipulation', 'session_splicing', 'tunneling'];
+    }
+    elsif ($ids_ips_type =~ /Fortinet|Checkpoint/i) {
+        $mark->{'ids_ips_bypass_techniques'} = ['traffic_normalization_evasion', 'polymorphic_encoding', 'decoy_traffic'];
+    }
+    else {
+        # تقنيات افتراضية لأنواع IDS/IPS الأخرى
+        $mark->{'ids_ips_bypass_techniques'} = ['fragmentation', 'payload_obfuscation', 'behavioral_analysis_evasion'];
+    }
+    
+    # تطبيق التجاوز على جميع الطلبات اللاحقة
+    hook_request_modification_for_ids_ips($mark);
+}
+
+sub hook_request_modification_for_ids_ips {
+    my ($mark) = @_;
+    
+    # ربط عملية تعديل طلبات HTTP لتجاوز IDS/IPS
+    $mark->{'hooks'}->{'request_ids_ips'} = \&modify_request_for_ids_ips_bypass;
+}
+
+sub modify_request_for_ids_ips_bypass {
+    my ($mark, $request) = @_;
+    
+    # تخطي التعديل إذا لم يتم تمكين تجاوز IDS/IPS
+    return $request unless $mark->{'ids_ips_bypass'};
+    
+    my $techniques = $mark->{'ids_ips_bypass_techniques'};
+    
+    # تطبيق كل تقنية ممكّنة
+    foreach my $technique (@$techniques) {
+        if ($technique eq 'fragmentation') {
+            apply_fragmentation($request);
+        }
+        elsif ($technique eq 'protocol_manipulation') {
+            apply_protocol_manipulation($request);
+        }
+        elsif ($technique eq 'timing_manipulation') {
+            apply_timing_manipulation($request);
+        }
+        elsif ($technique eq 'payload_obfuscation') {
+            apply_payload_obfuscation($request);
+        }
+        elsif ($technique eq 'traffic_normalization_evasion') {
+            apply_traffic_normalization_evasion($request);
+        }
+        elsif ($technique eq 'session_splicing') {
+            apply_session_splicing($request);
+        }
+        elsif ($technique eq 'polymorphic_encoding') {
+            apply_polymorphic_encoding($request);
+        }
+        elsif ($technique eq 'decoy_traffic') {
+            apply_decoy_traffic($request);
+        }
+        elsif ($technique eq 'tunneling') {
+            apply_tunneling($request);
+        }
+        elsif ($technique eq 'behavioral_analysis_evasion') {
+            apply_behavioral_analysis_evasion($request);
+        }
+    }
+    
+    return $request;
+}
+
+# تنفيذ التقنيات
+
+sub apply_fragmentation {
+    my ($request) = @_;
+    
+    # تقسيم الحمولة إلى أجزاء صغيرة لتجاوز التحليل
+    $request->{'fragmented'} = 1;
+    $request->{'fragment_size'} = 8;  # حجم الجزء بالبايت
+    
+    return $request;
+}
+
+sub apply_protocol_manipulation {
+    my ($request) = @_;
+    
+    # التلاعب ببروتوكول HTTP لتجاوز التحليل
+    $request->{'headers'}->{'Transfer-Encoding'} = 'chunked';
+    $request->{'headers'}->{'Content-Encoding'} = 'gzip';
+    
+    return $request;
+}
+
+sub apply_timing_manipulation {
+    my ($request) = @_;
+    
+    # إضافة تأخير بين الطلبات لتجاوز الكشف القائم على التوقيت
+    $request->{'delay_before'} = 500;  # تأخير قبل الطلب بالمللي ثانية
+    $request->{'delay_after'} = 300;   # تأخير بعد الطلب بالمللي ثانية
+    
+    return $request;
+}
+
+sub apply_payload_obfuscation {
+    my ($request) = @_;
+    
+    # تشويش الحمولة لتجاوز الكشف القائم على التوقيعات
+    $request->{'uri'} =~ s/select/s\xe0\xb2\xa0e\xe0\xb2\xa0l\xe0\xb2\xa0e\xe0\xb2\xa0c\xe0\xb2\xa0t/gi;
+    $request->{'uri'} =~ s/union/u\xe0\xb2\xa0n\xe0\xb2\xa0i\xe0\xb2\xa0o\xe0\xb2\xa0n/gi;
+    $request->{'uri'} =~ s/script/s\xe0\xb2\xa0c\xe0\xb2\xa0r\xe0\xb2\xa0i\xe0\xb2\xa0p\xe0\xb2\xa0t/gi;
+    
+    return $request;
+}
+
+sub apply_traffic_normalization_evasion {
+    my ($request) = @_;
+    
+    # تجاوز تطبيع حركة المرور المستخدم في IDS/IPS
+    $request->{'headers'}->{'Accept-Encoding'} = 'identity, *;q=0';
+    $request->{'headers'}->{'TE'} = 'trailers, deflate';
+    
+    return $request;
+}
+
+sub apply_session_splicing {
+    my ($request) = @_;
+    
+    # تقسيم الجلسة لتجاوز تحليل الجلسة الكاملة
+    $request->{'session_splicing'} = 1;
+    $request->{'max_segment_size'} = 16;  # حجم الجزء الأقصى بالبايت
+    
+    return $request;
+}
+
+sub apply_polymorphic_encoding {
+    my ($request) = @_;
+    
+    # استخدام ترميز متعدد الأشكال لتجاوز الكشف
+    my $uri = $request->{'uri'};
+    my $encoded_uri = '';
+    
+    for (my $i = 0; $i < length($uri); $i++) {
+        my $char = substr($uri, $i, 1);
+        my $rand = int(rand(3));
+        
+        if ($rand == 0) {
+            $encoded_uri .= $char;
+        }
+        elsif ($rand == 1) {
+            $encoded_uri .= sprintf("%%%02X", ord($char));
+        }
+        else {
+            $encoded_uri .= sprintf("%%u00%02X", ord($char));
+        }
+    }
+    
+    $request->{'uri'} = $encoded_uri;
+    
+    return $request;
+}
+
+sub apply_decoy_traffic {
+    my ($request) = @_;
+    
+    # إضافة حركة مرور خادعة لإرباك أنظمة IDS/IPS
+    $request->{'headers'}->{'X-Decoy-1'} = 'harmless_value_1';
+    $request->{'headers'}->{'X-Decoy-2'} = 'harmless_value_2';
+    $request->{'headers'}->{'X-Decoy-3'} = 'harmless_value_3';
+    
+    return $request;
+}
+
+sub apply_tunneling {
+    my ($request) = @_;
+    
+    # استخدام تقنيات النفق لتجاوز الفحص
+    $request->{'headers'}->{'X-Tunnel-Protocol'} = 'dns';
+    $request->{'tunnel_mode'} = 'enabled';
+    
+    return $request;
+}
+
+sub apply_behavioral_analysis_evasion {
+    my ($request) = @_;
+    
+    # تقنيات لتجاوز التحليل السلوكي
+    $request->{'headers'}->{'User-Agent'} = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    $request->{'headers'}->{'Accept'} = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
+    $request->{'headers'}->{'Accept-Language'} = 'en-US,en;q=0.5';
+    $request->{'headers'}->{'Referer'} = 'https://www.google.com/';
+    
+    # محاكاة سلوك المستخدم الطبيعي
+    $request->{'mimic_human'} = 1;
+    
+    return $request;
+}
+
+1;

@@ -1,0 +1,67 @@
+#!/usr/bin/perl
+#
+# Auto Color Rotation Module for Nikto
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin implements automatic color rotation on each execution
+
+package nikto_auto_color_rotation;
+use strict;
+
+# Plugin register function
+sub nikto_auto_color_rotation_register {
+    my $id = { 
+        name        => "auto_color_rotation",
+        full_name   => "Auto Color Rotation Module",
+        author      => "Enhanced Nikto Project",
+        description => "Implements automatic color rotation on each execution",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&setup_auto_rotation, priority => 1 },
+                       },
+    };
+    
+    return $id;
+}
+
+# Available color schemes
+my @COLOR_SCHEMES = (
+    "cyber",
+    "desert",
+    "neon",
+    "midnight",
+    "blood",
+    "matrix",
+    "sunset",
+    "ocean",
+    "forest",
+    "aurora"
+);
+
+# Setup auto rotation
+sub setup_auto_rotation {
+    my ($self, $mark) = @_;
+    
+    # Skip if a specific color scheme was requested
+    return $mark if (defined $mark->{cli}->{'color-scheme'});
+    
+    # Get current time to seed the rotation
+    my $time = time();
+    
+    # Select color scheme based on time
+    my $scheme_index = $time % scalar(@COLOR_SCHEMES);
+    my $selected_scheme = $COLOR_SCHEMES[$scheme_index];
+    
+    # Set the color scheme
+    $mark->{cli}->{'color-scheme'} = $selected_scheme;
+    $mark->{'current_color_scheme'} = $selected_scheme;
+    
+    # Print auto rotation message
+    if ($mark->{'show_status'}) {
+        print "\033[38;5;220m[*] Auto Color Rotation: Selected scheme '$selected_scheme' for this session\033[0m\n";
+    }
+    
+    return $mark;
+}
+
+1;

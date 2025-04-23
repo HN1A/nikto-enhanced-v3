@@ -1,0 +1,678 @@
+#!/usr/bin/perl
+#
+# Enhanced Scanning Module for Nikto
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds advanced scanning capabilities and features
+
+package nikto_enhanced_scanning;
+use strict;
+
+# Plugin register function
+sub nikto_enhanced_scanning_register {
+    my $id = { 
+        name        => "enhanced_scanning",
+        full_name   => "Enhanced Scanning Module",
+        author      => "Enhanced Nikto Project",
+        description => "Adds advanced scanning capabilities and features",
+        version     => "2.0",
+        hooks       => {
+                         scan => { method => \&apply_enhanced_scanning, },
+                         start => { method => \&initialize_enhanced_scanning, },
+                       },
+    };
+    
+    return $id;
+}
+
+# Color schemes - defined at the beginning to avoid reference errors
+my %LOCAL_COLOR_SCHEMES = (
+    cyber => {
+        header    => "\033[38;5;39m",
+        info      => "\033[38;5;45m",
+        success   => "\033[38;5;46m",
+        warning   => "\033[38;5;208m",
+        error     => "\033[38;5;196m",
+        highlight => "\033[38;5;51m",
+        normal    => "\033[38;5;15m",
+    },
+    desert => {
+        header    => "\033[38;5;172m",
+        info      => "\033[38;5;180m",
+        success   => "\033[38;5;107m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;160m",
+        highlight => "\033[38;5;220m",
+        normal    => "\033[38;5;223m",
+    },
+    neon => {
+        header    => "\033[38;5;201m",
+        info      => "\033[38;5;207m",
+        success   => "\033[38;5;118m",
+        warning   => "\033[38;5;226m",
+        error     => "\033[38;5;197m",
+        highlight => "\033[38;5;213m",
+        normal    => "\033[38;5;159m",
+    },
+    midnight => {
+        header    => "\033[38;5;63m",
+        info      => "\033[38;5;75m",
+        success   => "\033[38;5;79m",
+        warning   => "\033[38;5;215m",
+        error     => "\033[38;5;203m",
+        highlight => "\033[38;5;147m",
+        normal    => "\033[38;5;153m",
+    },
+    blood => {
+        header    => "\033[38;5;196m",
+        info      => "\033[38;5;203m",
+        success   => "\033[38;5;107m",
+        warning   => "\033[38;5;214m",
+        error     => "\033[38;5;160m",
+        highlight => "\033[38;5;197m",
+        normal    => "\033[38;5;223m",
+    },
+);
+
+# Global variables
+my $deep_scan_enabled = 0;
+my $ai_scan_enabled = 0;
+my $adaptive_scan_enabled = 0;
+my $scan_level = 3; # Default scan level (1-5)
+my $scan_speed = "normal"; # Default scan speed (slow, normal, fast)
+my $scan_accuracy = "high"; # Default scan accuracy (low, medium, high)
+
+# Helper function to get color code
+sub get_color {
+    my ($scheme, $type) = @_;
+    
+    # Default color scheme
+    $scheme = "cyber" unless (defined $scheme && exists $LOCAL_COLOR_SCHEMES{$scheme});
+    
+    # Default color type
+    $type = "normal" unless (defined $type && exists $LOCAL_COLOR_SCHEMES{$scheme}->{$type});
+    
+    return $LOCAL_COLOR_SCHEMES{$scheme}->{$type};
+}
+
+# Initialize enhanced scanning
+sub initialize_enhanced_scanning {
+    my ($self, $mark) = @_;
+    
+    # Check if enhanced scanning features are enabled
+    $deep_scan_enabled = 1 if (defined $mark->{cli}->{'deep-scan'});
+    $ai_scan_enabled = 1 if (defined $mark->{cli}->{'ai-scan'});
+    $adaptive_scan_enabled = 1 if (defined $mark->{cli}->{'adaptive-scan'});
+    
+    # Set scan level if specified
+    if (defined $mark->{cli}->{'scan-level'} && $mark->{cli}->{'scan-level'} =~ /^[1-5]$/) {
+        $scan_level = $mark->{cli}->{'scan-level'};
+    }
+    
+    # Set scan speed if specified
+    if (defined $mark->{cli}->{'scan-speed'}) {
+        if ($mark->{cli}->{'scan-speed'} =~ /^(slow|normal|fast)$/i) {
+            $scan_speed = lc($mark->{cli}->{'scan-speed'});
+        }
+    }
+    
+    # Set scan accuracy if specified
+    if (defined $mark->{cli}->{'scan-accuracy'}) {
+        if ($mark->{cli}->{'scan-accuracy'} =~ /^(low|medium|high)$/i) {
+            $scan_accuracy = lc($mark->{cli}->{'scan-accuracy'});
+        }
+    }
+    
+    # Log initialization
+    if ($deep_scan_enabled || $ai_scan_enabled || $adaptive_scan_enabled) {
+        $mark->{'plugin_output'}->{'enhanced_scanning'} = "Initialized Enhanced Scanning Module (Level: $scan_level, Speed: $scan_speed, Accuracy: $scan_accuracy)";
+        
+        # Print initialization message
+        if ($mark->{'show_status'}) {
+            my $color_scheme = $mark->{'current_color_scheme'} || "cyber";
+            my $header_color = get_color($color_scheme, "header");
+            my $info_color = get_color($color_scheme, "info");
+            my $highlight_color = get_color($color_scheme, "highlight");
+            my $reset_color = "\033[0m";
+            
+            print "\n";
+            print $header_color . "╔═══════════════════════════════════════════════════════════════╗" . $reset_color . "\n";
+            print $header_color . "║                ENHANCED SCANNING MODULE                       ║" . $reset_color . "\n";
+            print $header_color . "╚═══════════════════════════════════════════════════════════════╝" . $reset_color . "\n";
+            print $info_color . "Scan Level: " . $highlight_color . $scan_level . "/5" . $reset_color . "\n";
+            print $info_color . "Scan Speed: " . $highlight_color . ucfirst($scan_speed) . $reset_color . "\n";
+            print $info_color . "Scan Accuracy: " . $highlight_color . ucfirst($scan_accuracy) . $reset_color . "\n";
+            print $info_color . "Deep Scan: " . $highlight_color . ($deep_scan_enabled ? "Enabled" : "Disabled") . $reset_color . "\n";
+            print $info_color . "AI-Assisted Scan: " . $highlight_color . ($ai_scan_enabled ? "Enabled" : "Disabled") . $reset_color . "\n";
+            print $info_color . "Adaptive Scan: " . $highlight_color . ($adaptive_scan_enabled ? "Enabled" : "Disabled") . $reset_color . "\n";
+            print "\n";
+        }
+    }
+    
+    return $mark;
+}
+
+# Apply enhanced scanning
+sub apply_enhanced_scanning {
+    my ($self, $mark) = @_;
+    
+    # Skip if no enhanced scanning features are enabled
+    return $mark unless ($deep_scan_enabled || $ai_scan_enabled || $adaptive_scan_enabled);
+    
+    # Get request and response
+    my $request = $mark->{'request'};
+    my $response = $mark->{'response'};
+    
+    # Skip if no request or response
+    return $mark unless (defined $request && defined $response);
+    
+    # Apply enhanced scanning techniques
+    if ($deep_scan_enabled) {
+        apply_deep_scan($mark);
+    }
+    
+    if ($ai_scan_enabled) {
+        apply_ai_scan($mark);
+    }
+    
+    if ($adaptive_scan_enabled) {
+        apply_adaptive_scan($mark);
+    }
+    
+    return $mark;
+}
+
+# Apply deep scan
+sub apply_deep_scan {
+    my ($mark) = @_;
+    
+    # Get response
+    my $response = $mark->{'response'};
+    
+    # Skip if no response
+    return unless (defined $response);
+    
+    # Get response body
+    my $body = $response->{'body'};
+    
+    # Skip if no body
+    return unless (defined $body);
+    
+    # Perform deep scan based on scan level
+    my @findings = ();
+    
+    # Level 1: Basic deep scan
+    if ($scan_level >= 1) {
+        # Check for hidden comments
+        while ($body =~ /<!--(.*?)-->/gs) {
+            my $comment = $1;
+            if ($comment =~ /password|user|admin|config|secret|key|token|api|auth/i) {
+                push @findings, {
+                    type => "hidden_comment",
+                    content => $comment,
+                    severity => "medium",
+                };
+            }
+        }
+        
+        # Check for hidden form fields
+        while ($body =~ /<input[^>]*type=['"]hidden['"][^>]*>/gi) {
+            my $field = $&;
+            if ($field =~ /name=['"]([^'"]*)['"]/i) {
+                my $name = $1;
+                if ($name =~ /password|user|admin|config|secret|key|token|api|auth/i) {
+                    push @findings, {
+                        type => "hidden_field",
+                        content => $field,
+                        severity => "medium",
+                    };
+                }
+            }
+        }
+    }
+    
+    # Level 2: Intermediate deep scan
+    if ($scan_level >= 2) {
+        # Check for JavaScript variables
+        while ($body =~ /var\s+(\w+)\s*=\s*['"]([^'"]*)['"]/gi) {
+            my $var_name = $1;
+            my $var_value = $2;
+            if ($var_name =~ /password|user|admin|config|secret|key|token|api|auth/i) {
+                push @findings, {
+                    type => "js_variable",
+                    content => "var $var_name = \"$var_value\"",
+                    severity => "high",
+                };
+            }
+        }
+        
+        # Check for API endpoints
+        while ($body =~ /['"]\/api\/([^'"]*)['"]/gi) {
+            my $endpoint = $1;
+            push @findings, {
+                type => "api_endpoint",
+                content => "/api/$endpoint",
+                severity => "info",
+            };
+        }
+    }
+    
+    # Level 3: Advanced deep scan
+    if ($scan_level >= 3) {
+        # Check for JSON data
+        while ($body =~ /\{[^{}]*"[^"]*"\s*:\s*"[^"]*"[^{}]*\}/gs) {
+            my $json = $&;
+            if ($json =~ /"(password|user|admin|config|secret|key|token|api|auth)":\s*"([^"]*)"/i) {
+                push @findings, {
+                    type => "json_data",
+                    content => $json,
+                    severity => "high",
+                };
+            }
+        }
+        
+        # Check for base64 encoded data
+        while ($body =~ /['"]([A-Za-z0-9+\/=]{30,})['"]/g) {
+            my $base64 = $1;
+            if ($base64 =~ /^[A-Za-z0-9+\/=]+$/) {
+                push @findings, {
+                    type => "base64_data",
+                    content => $base64,
+                    severity => "medium",
+                };
+            }
+        }
+    }
+    
+    # Level 4: Expert deep scan
+    if ($scan_level >= 4) {
+        # Check for potential SQL queries
+        while ($body =~ /SELECT\s+.*\s+FROM\s+.*|INSERT\s+INTO\s+.*\s+VALUES|UPDATE\s+.*\s+SET\s+.*|DELETE\s+FROM\s+.*/gi) {
+            my $sql = $&;
+            push @findings, {
+                type => "sql_query",
+                content => $sql,
+                severity => "critical",
+            };
+        }
+        
+        # Check for potential command injection
+        while ($body =~ /exec\s*\(|system\s*\(|shell_exec\s*\(|passthru\s*\(|eval\s*\(|popen\s*\(/gi) {
+            my $cmd = $&;
+            push @findings, {
+                type => "command_injection",
+                content => $cmd,
+                severity => "critical",
+            };
+        }
+    }
+    
+    # Level 5: Ultimate deep scan
+    if ($scan_level >= 5) {
+        # Check for potential AWS keys
+        while ($body =~ /AKIA[0-9A-Z]{16}/g) {
+            my $aws_key = $&;
+            push @findings, {
+                type => "aws_key",
+                content => $aws_key,
+                severity => "critical",
+            };
+        }
+        
+        # Check for potential private keys
+        if ($body =~ /-----BEGIN\s+(?:RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----/) {
+            push @findings, {
+                type => "private_key",
+                content => "Private key found",
+                severity => "critical",
+            };
+        }
+        
+        # Check for potential JWT tokens
+        while ($body =~ /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) {
+            my $jwt = $&;
+            push @findings, {
+                type => "jwt_token",
+                content => $jwt,
+                severity => "high",
+            };
+        }
+    }
+    
+    # Add findings to mark
+    if (@findings) {
+        $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\nDeep Scan Findings:";
+        foreach my $finding (@findings) {
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n- Type: $finding->{type}, Severity: $finding->{severity}";
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n  Content: " . substr($finding->{content}, 0, 100) . (length($finding->{content}) > 100 ? "..." : "");
+            
+            # Add to scandata
+            push @{$mark->{'scandata'}}, {
+                'nikto_id' => "800000",
+                'osvdb' => "800000",
+                'method' => $mark->{'request'}->{'method'},
+                'msg' => "Enhanced Scan: $finding->{type} ($finding->{severity}): " . substr($finding->{content}, 0, 100) . (length($finding->{content}) > 100 ? "..." : ""),
+            };
+        }
+        
+        # Print findings
+        if ($mark->{'show_status'}) {
+            my $color_scheme = $mark->{'current_color_scheme'} || "cyber";
+            my $success_color = get_color($color_scheme, "success");
+            my $info_color = get_color($color_scheme, "info");
+            my $warning_color = get_color($color_scheme, "warning");
+            my $error_color = get_color($color_scheme, "error");
+            my $reset_color = "\033[0m";
+            
+            print $success_color . "[+] Deep Scan found " . scalar(@findings) . " potential issues" . $reset_color . "\n";
+            foreach my $finding (@findings) {
+                my $severity_color = $info_color;
+                if ($finding->{severity} eq "critical") {
+                    $severity_color = $error_color;
+                } elsif ($finding->{severity} eq "high") {
+                    $severity_color = $warning_color;
+                }
+                
+                print $severity_color . "  - $finding->{type} ($finding->{severity}): " . substr($finding->{content}, 0, 100) . (length($finding->{content}) > 100 ? "..." : "") . $reset_color . "\n";
+            }
+        }
+    }
+}
+
+# Apply AI scan
+sub apply_ai_scan {
+    my ($mark) = @_;
+    
+    # Get response
+    my $response = $mark->{'response'};
+    
+    # Skip if no response
+    return unless (defined $response);
+    
+    # Get response body
+    my $body = $response->{'body'};
+    
+    # Skip if no body
+    return unless (defined $body);
+    
+    # Simulate AI-assisted scanning
+    my @findings = ();
+    
+    # Analyze response patterns using simulated AI
+    my $response_size = length($body);
+    my $headers = $response->{'headers'};
+    
+    # Pattern analysis
+    my $pattern_score = 0;
+    
+    # Check for suspicious patterns
+    if ($body =~ /error|exception|warning|undefined|null|invalid/i) {
+        $pattern_score += 10;
+    }
+    
+    if ($body =~ /sql|database|query|syntax|mysql|oracle|postgres/i) {
+        $pattern_score += 15;
+    }
+    
+    if ($body =~ /admin|administrator|root|superuser|supervisor/i) {
+        $pattern_score += 20;
+    }
+    
+    if ($body =~ /password|passwd|pwd|pass|credentials|login/i) {
+        $pattern_score += 25;
+    }
+    
+    if ($body =~ /token|key|secret|api|auth|oauth/i) {
+        $pattern_score += 30;
+    }
+    
+    # Header analysis
+    my $header_score = 0;
+    
+    if (exists $headers->{'X-Powered-By'}) {
+        $header_score += 10;
+    }
+    
+    if (exists $headers->{'Server'}) {
+        $header_score += 15;
+    }
+    
+    if (!exists $headers->{'X-Frame-Options'}) {
+        $header_score += 20;
+    }
+    
+    if (!exists $headers->{'X-XSS-Protection'}) {
+        $header_score += 25;
+    }
+    
+    if (!exists $headers->{'Content-Security-Policy'}) {
+        $header_score += 30;
+    }
+    
+    # Calculate total score
+    my $total_score = $pattern_score + $header_score;
+    
+    # Determine findings based on score
+    if ($total_score >= 100) {
+        push @findings, {
+            type => "ai_analysis",
+            content => "Critical vulnerability potential detected (Score: $total_score)",
+            severity => "critical",
+        };
+    } elsif ($total_score >= 75) {
+        push @findings, {
+            type => "ai_analysis",
+            content => "High vulnerability potential detected (Score: $total_score)",
+            severity => "high",
+        };
+    } elsif ($total_score >= 50) {
+        push @findings, {
+            type => "ai_analysis",
+            content => "Medium vulnerability potential detected (Score: $total_score)",
+            severity => "medium",
+        };
+    } elsif ($total_score >= 25) {
+        push @findings, {
+            type => "ai_analysis",
+            content => "Low vulnerability potential detected (Score: $total_score)",
+            severity => "low",
+        };
+    } else {
+        push @findings, {
+            type => "ai_analysis",
+            content => "No significant vulnerability potential detected (Score: $total_score)",
+            severity => "info",
+        };
+    }
+    
+    # Add findings to mark
+    if (@findings) {
+        $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\nAI Scan Findings:";
+        foreach my $finding (@findings) {
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n- Type: $finding->{type}, Severity: $finding->{severity}";
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n  Content: $finding->{content}";
+            
+            # Add to scandata
+            push @{$mark->{'scandata'}}, {
+                'nikto_id' => "800001",
+                'osvdb' => "800001",
+                'method' => $mark->{'request'}->{'method'},
+                'msg' => "AI Scan: $finding->{content}",
+            };
+        }
+        
+        # Print findings
+        if ($mark->{'show_status'}) {
+            my $color_scheme = $mark->{'current_color_scheme'} || "cyber";
+            my $success_color = get_color($color_scheme, "success");
+            my $info_color = get_color($color_scheme, "info");
+            my $warning_color = get_color($color_scheme, "warning");
+            my $error_color = get_color($color_scheme, "error");
+            my $reset_color = "\033[0m";
+            
+            print $success_color . "[+] AI Scan completed with score: $total_score" . $reset_color . "\n";
+            foreach my $finding (@findings) {
+                my $severity_color = $info_color;
+                if ($finding->{severity} eq "critical") {
+                    $severity_color = $error_color;
+                } elsif ($finding->{severity} eq "high") {
+                    $severity_color = $warning_color;
+                }
+                
+                print $severity_color . "  - $finding->{content}" . $reset_color . "\n";
+            }
+        }
+    }
+}
+
+# Apply adaptive scan
+sub apply_adaptive_scan {
+    my ($mark) = @_;
+    
+    # Get response
+    my $response = $mark->{'response'};
+    
+    # Skip if no response
+    return unless (defined $response);
+    
+    # Get response status code
+    my $status = $response->{'status'};
+    
+    # Skip if no status
+    return unless (defined $status);
+    
+    # Adapt scanning based on response
+    my @adaptations = ();
+    
+    # Adapt based on status code
+    if ($status =~ /^2/) {
+        # 2xx: Success
+        push @adaptations, {
+            type => "status_adaptation",
+            content => "Increasing scan depth for successful responses",
+            action => "increase_depth",
+        };
+    } elsif ($status =~ /^3/) {
+        # 3xx: Redirection
+        push @adaptations, {
+            type => "status_adaptation",
+            content => "Following redirects and scanning target locations",
+            action => "follow_redirects",
+        };
+    } elsif ($status =~ /^4/) {
+        # 4xx: Client Error
+        if ($status eq "403") {
+            # 403: Forbidden
+            push @adaptations, {
+                type => "status_adaptation",
+                content => "Detected 403 Forbidden, attempting bypass techniques",
+                action => "bypass_forbidden",
+            };
+        } elsif ($status eq "404") {
+            # 404: Not Found
+            push @adaptations, {
+                type => "status_adaptation",
+                content => "Detected 404 Not Found, checking for custom error pages",
+                action => "check_custom_errors",
+            };
+        } elsif ($status eq "401") {
+            # 401: Unauthorized
+            push @adaptations, {
+                type => "status_adaptation",
+                content => "Detected 401 Unauthorized, attempting authentication bypass",
+                action => "bypass_auth",
+            };
+        }
+    } elsif ($status =~ /^5/) {
+        # 5xx: Server Error
+        push @adaptations, {
+            type => "status_adaptation",
+            content => "Detected server error, attempting to exploit error conditions",
+            action => "exploit_errors",
+        };
+    }
+    
+    # Adapt based on response headers
+    my $headers = $response->{'headers'};
+    if (defined $headers) {
+        if (exists $headers->{'Server'}) {
+            push @adaptations, {
+                type => "header_adaptation",
+                content => "Detected server: $headers->{'Server'}, tailoring scan for this server type",
+                action => "tailor_for_server",
+            };
+        }
+        
+        if (exists $headers->{'X-Powered-By'}) {
+            push @adaptations, {
+                type => "header_adaptation",
+                content => "Detected technology: $headers->{'X-Powered-By'}, focusing on relevant vulnerabilities",
+                action => "focus_on_technology",
+            };
+        }
+        
+        if (exists $headers->{'Set-Cookie'}) {
+            push @adaptations, {
+                type => "header_adaptation",
+                content => "Detected cookies, analyzing for session vulnerabilities",
+                action => "analyze_cookies",
+            };
+        }
+    }
+    
+    # Apply adaptations
+    foreach my $adaptation (@adaptations) {
+        if ($adaptation->{action} eq "increase_depth") {
+            # Increase scan depth
+            $mark->{'scan_depth'} = ($mark->{'scan_depth'} || 1) + 1;
+        } elsif ($adaptation->{action} eq "follow_redirects") {
+            # Enable redirect following
+            $mark->{'follow_redirects'} = 1;
+        } elsif ($adaptation->{action} eq "bypass_forbidden") {
+            # Apply forbidden bypass techniques
+            $mark->{'bypass_forbidden'} = 1;
+        } elsif ($adaptation->{action} eq "check_custom_errors") {
+            # Check for custom error pages
+            $mark->{'check_custom_errors'} = 1;
+        } elsif ($adaptation->{action} eq "bypass_auth") {
+            # Apply authentication bypass techniques
+            $mark->{'bypass_auth'} = 1;
+        } elsif ($adaptation->{action} eq "exploit_errors") {
+            # Exploit error conditions
+            $mark->{'exploit_errors'} = 1;
+        } elsif ($adaptation->{action} eq "tailor_for_server") {
+            # Tailor scan for server type
+            $mark->{'tailor_for_server'} = $headers->{'Server'};
+        } elsif ($adaptation->{action} eq "focus_on_technology") {
+            # Focus on technology-specific vulnerabilities
+            $mark->{'focus_on_technology'} = $headers->{'X-Powered-By'};
+        } elsif ($adaptation->{action} eq "analyze_cookies") {
+            # Analyze cookies for vulnerabilities
+            $mark->{'analyze_cookies'} = 1;
+        }
+    }
+    
+    # Add adaptations to mark
+    if (@adaptations) {
+        $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\nAdaptive Scan Adaptations:";
+        foreach my $adaptation (@adaptations) {
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n- Type: $adaptation->{type}, Action: $adaptation->{action}";
+            $mark->{'plugin_output'}->{'enhanced_scanning'} .= "\n  Content: $adaptation->{content}";
+        }
+        
+        # Print adaptations
+        if ($mark->{'show_status'}) {
+            my $color_scheme = $mark->{'current_color_scheme'} || "cyber";
+            my $success_color = get_color($color_scheme, "success");
+            my $info_color = get_color($color_scheme, "info");
+            my $reset_color = "\033[0m";
+            
+            print $success_color . "[+] Adaptive Scan applied " . scalar(@adaptations) . " adaptations" . $reset_color . "\n";
+            foreach my $adaptation (@adaptations) {
+                print $info_color . "  - $adaptation->{content}" . $reset_color . "\n";
+            }
+        }
+    }
+}
+
+1;

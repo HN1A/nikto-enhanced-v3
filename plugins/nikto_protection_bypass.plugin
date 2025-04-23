@@ -1,0 +1,1034 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto Protection Bypass Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds protection bypass capabilities to Nikto
+# including CAPTCHA bypass, WAF evasion, and rate limiting bypass.
+#
+
+use strict;
+
+# Plugin register function
+sub nikto_protection_bypass_register {
+    my $id = { 
+        name        => "protection_bypass",
+        full_name   => "Protection Bypass Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides protection bypass capabilities including CAPTCHA bypass, WAF evasion, and rate limiting bypass",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&setup_protection_bypass, weight => 3, },
+                         prefetch => { method => \&apply_bypass_techniques, },
+                         postfetch => { method => \&analyze_protection_response, },
+                       },
+        options => {
+                     captcha_bypass => "Enable CAPTCHA bypass techniques (1=on, 0=off)",
+                     waf_evasion => "Enable WAF evasion techniques (1=on, 0=off)",
+                     rate_limit_bypass => "Enable rate limiting bypass (1=on, 0=off)",
+                     smart_retry => "Enable smart retry on blocked requests (1=on, 0=off)",
+                     max_retries => "Maximum number of retries for blocked requests (default: 3)",
+                     fingerprint_waf => "Fingerprint WAF before scanning (1=on, 0=off)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Setup protection bypass features
+sub setup_protection_bypass {
+    my ($self, $mark) = @_;
+    
+    # Initialize protection bypass report
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} = "Protection Bypass Module Report:\n";
+    
+    # Setup CAPTCHA bypass if enabled
+    if (defined $mark->{'protection_bypass.captcha_bypass'} && $mark->{'protection_bypass.captcha_bypass'} eq '1') {
+        setup_captcha_bypass($self, $mark);
+    }
+    
+    # Setup WAF evasion if enabled
+    if (defined $mark->{'protection_bypass.waf_evasion'} && $mark->{'protection_bypass.waf_evasion'} eq '1') {
+        setup_waf_evasion($self, $mark);
+    }
+    
+    # Setup rate limiting bypass if enabled
+    if (defined $mark->{'protection_bypass.rate_limit_bypass'} && $mark->{'protection_bypass.rate_limit_bypass'} eq '1') {
+        setup_rate_limit_bypass($self, $mark);
+    }
+    
+    # Setup smart retry if enabled
+    if (defined $mark->{'protection_bypass.smart_retry'} && $mark->{'protection_bypass.smart_retry'} eq '1') {
+        $mark->{'protection_bypass.max_retries'} = defined $mark->{'protection_bypass.max_retries'} ? 
+                                                 $mark->{'protection_bypass.max_retries'} : 3;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Smart retry enabled with max " . 
+                                                         $mark->{'protection_bypass.max_retries'} . " retries\n";
+    }
+    
+    # Fingerprint WAF if enabled
+    if (defined $mark->{'protection_bypass.fingerprint_waf'} && $mark->{'protection_bypass.fingerprint_waf'} eq '1') {
+        fingerprint_waf($self, $mark);
+    }
+    
+    return $mark;
+}
+
+# Setup CAPTCHA bypass
+sub setup_captcha_bypass {
+    my ($self, $mark) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Setting up CAPTCHA bypass techniques\n";
+    
+    # Initialize CAPTCHA bypass techniques
+    $mark->{'protection_bypass.captcha_techniques'} = [
+        {
+            name => "Header Manipulation",
+            description => "Manipulate headers to appear as a legitimate browser",
+            apply => \&apply_header_manipulation
+        },
+        {
+            name => "Cookie Preservation",
+            description => "Preserve and reuse cookies to maintain session",
+            apply => \&apply_cookie_preservation
+        },
+        {
+            name => "JavaScript Emulation",
+            description => "Emulate JavaScript execution for simple challenges",
+            apply => \&apply_js_emulation
+        },
+        {
+            name => "Browser Fingerprint Spoofing",
+            description => "Spoof browser fingerprints to bypass browser checks",
+            apply => \&apply_fingerprint_spoofing
+        },
+        {
+            name => "Request Pattern Variation",
+            description => "Vary request patterns to avoid triggering CAPTCHA",
+            apply => \&apply_request_variation
+        }
+    ];
+    
+    # Initialize CAPTCHA detection patterns
+    $mark->{'protection_bypass.captcha_patterns'} = [
+        qr/captcha/i,
+        qr/recaptcha/i,
+        qr/hcaptcha/i,
+        qr/are\s+you\s+a\s+human/i,
+        qr/human\s+verification/i,
+        qr/bot\s+detection/i,
+        qr/challenge\-platform/i,
+        qr/security\s+check/i,
+        qr/verify\s+you\s+are\s+human/i
+    ];
+    
+    # Initialize CAPTCHA bypass state
+    $mark->{'protection_bypass.captcha_state'} = {
+        detected => 0,
+        bypass_attempts => 0,
+        successful_bypasses => 0,
+        cookies => {},
+        last_successful_technique => undef
+    };
+    
+    return;
+}
+
+# Setup WAF evasion
+sub setup_waf_evasion {
+    my ($self, $mark) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Setting up WAF evasion techniques\n";
+    
+    # Initialize WAF evasion techniques
+    $mark->{'protection_bypass.waf_techniques'} = [
+        {
+            name => "Payload Obfuscation",
+            description => "Obfuscate payloads to evade signature-based detection",
+            apply => \&apply_payload_obfuscation
+        },
+        {
+            name => "Request Fragmentation",
+            description => "Split requests to evade pattern matching",
+            apply => \&apply_request_fragmentation
+        },
+        {
+            name => "Parameter Pollution",
+            description => "Use parameter pollution to confuse WAF parsers",
+            apply => \&apply_parameter_pollution
+        },
+        {
+            name => "HTTP Method Switching",
+            description => "Switch HTTP methods to bypass method-specific rules",
+            apply => \&apply_method_switching
+        },
+        {
+            name => "Encoding Variation",
+            description => "Use different encodings to bypass pattern matching",
+            apply => \&apply_encoding_variation
+        }
+    ];
+    
+    # Initialize WAF detection patterns
+    $mark->{'protection_bypass.waf_patterns'} = [
+        { name => "Cloudflare", pattern => qr/cloudflare|cf-ray|cf-cache-status/i },
+        { name => "ModSecurity", pattern => qr/mod_security|NOYB/i },
+        { name => "Akamai", pattern => qr/akamai|x-akamai-transformed/i },
+        { name => "F5 BIG-IP ASM", pattern => qr/ts=[a-z0-9]{3,8}&/i },
+        { name => "Imperva", pattern => qr/incap_ses|visid_incap/i },
+        { name => "Sucuri", pattern => qr/sucuri|cloudproxy/i },
+        { name => "Barracuda", pattern => qr/barracuda|barra_counter_session/i },
+        { name => "Citrix NetScaler", pattern => qr/ns_af=|citrix_ns_id/i },
+        { name => "AWS WAF", pattern => qr/awselb|x-amzn-trace-id/i },
+        { name => "Wordfence", pattern => qr/wordfence|wfvt_|wf_loginalerted/i }
+    ];
+    
+    # Initialize WAF evasion state
+    $mark->{'protection_bypass.waf_state'} = {
+        detected => 0,
+        waf_type => undef,
+        bypass_attempts => 0,
+        successful_bypasses => 0,
+        last_successful_technique => undef
+    };
+    
+    return;
+}
+
+# Setup rate limiting bypass
+sub setup_rate_limit_bypass {
+    my ($self, $mark) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Setting up rate limiting bypass techniques\n";
+    
+    # Initialize rate limiting bypass techniques
+    $mark->{'protection_bypass.rate_limit_techniques'} = [
+        {
+            name => "Request Throttling",
+            description => "Dynamically adjust request rate based on responses",
+            apply => \&apply_request_throttling
+        },
+        {
+            name => "IP Rotation",
+            description => "Rotate IP addresses to distribute requests",
+            apply => \&apply_ip_rotation
+        },
+        {
+            name => "Distributed Scanning",
+            description => "Distribute scanning across multiple sources",
+            apply => \&apply_distributed_scanning
+        },
+        {
+            name => "Header Rotation",
+            description => "Rotate headers to appear as different clients",
+            apply => \&apply_header_rotation
+        },
+        {
+            name => "Exponential Backoff",
+            description => "Use exponential backoff when rate limits are detected",
+            apply => \&apply_exponential_backoff
+        }
+    ];
+    
+    # Initialize rate limit detection patterns
+    $mark->{'protection_bypass.rate_limit_patterns'} = [
+        qr/rate\s+limit\s+exceeded/i,
+        qr/too\s+many\s+requests/i,
+        qr/request\s+throttled/i,
+        qr/quota\s+exceeded/i,
+        qr/slow\s+down/i,
+        qr/try\s+again\s+later/i
+    ];
+    
+    # Initialize rate limiting bypass state
+    $mark->{'protection_bypass.rate_limit_state'} = {
+        detected => 0,
+        bypass_attempts => 0,
+        successful_bypasses => 0,
+        current_delay => 1,  # Initial delay in seconds
+        last_successful_technique => undef
+    };
+    
+    return;
+}
+
+# Fingerprint WAF
+sub fingerprint_waf {
+    my ($self, $mark) = @_;
+    
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Fingerprinting WAF...\n";
+    
+    # Send a probe request to detect WAF
+    my $probe_url = $mark->{'hostname'};
+    my $probe_headers = {
+        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'X-Scan-Signature' => 'WAF-Fingerprint-Probe'
+    };
+    
+    my ($res, $content, $error, $request, $response) = LW2::http_request($probe_url, 'GET', '', $probe_headers, '', '', 'protection_bypass');
+    
+    # Check for WAF signatures in response
+    if ($response) {
+        my $waf_detected = 0;
+        my $waf_name = "Unknown";
+        
+        # Check headers for WAF signatures
+        foreach my $header (keys %{$response}) {
+            foreach my $waf (@{$mark->{'protection_bypass.waf_patterns'}}) {
+                if ($response->{$header} =~ $waf->{'pattern'}) {
+                    $waf_detected = 1;
+                    $waf_name = $waf->{'name'};
+                    last;
+                }
+            }
+            last if $waf_detected;
+        }
+        
+        # Check content for WAF signatures if not detected in headers
+        if (!$waf_detected && $content) {
+            foreach my $waf (@{$mark->{'protection_bypass.waf_patterns'}}) {
+                if ($content =~ $waf->{'pattern'}) {
+                    $waf_detected = 1;
+                    $waf_name = $waf->{'name'};
+                    last;
+                }
+            }
+        }
+        
+        # Update WAF state
+        if ($waf_detected) {
+            $mark->{'protection_bypass.waf_state'}->{'detected'} = 1;
+            $mark->{'protection_bypass.waf_state'}->{'waf_type'} = $waf_name;
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "WAF detected: $waf_name\n";
+        }
+        else {
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "No WAF detected\n";
+        }
+    }
+    else {
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "WAF fingerprinting failed: $error\n";
+    }
+    
+    return;
+}
+
+# Apply bypass techniques before sending a request
+sub apply_bypass_techniques {
+    my ($self, $mark, $request) = @_;
+    
+    # Skip if no protection bypass is enabled
+    return $request unless (
+        (defined $mark->{'protection_bypass.captcha_bypass'} && $mark->{'protection_bypass.captcha_bypass'} eq '1') ||
+        (defined $mark->{'protection_bypass.waf_evasion'} && $mark->{'protection_bypass.waf_evasion'} eq '1') ||
+        (defined $mark->{'protection_bypass.rate_limit_bypass'} && $mark->{'protection_bypass.rate_limit_bypass'} eq '1')
+    );
+    
+    # Apply CAPTCHA bypass techniques if enabled and CAPTCHA was previously detected
+    if (defined $mark->{'protection_bypass.captcha_bypass'} && 
+        $mark->{'protection_bypass.captcha_bypass'} eq '1' &&
+        $mark->{'protection_bypass.captcha_state'}->{'detected'}) {
+        
+        $request = apply_captcha_bypass_techniques($self, $mark, $request);
+    }
+    
+    # Apply WAF evasion techniques if enabled and WAF was detected
+    if (defined $mark->{'protection_bypass.waf_evasion'} && 
+        $mark->{'protection_bypass.waf_evasion'} eq '1' &&
+        $mark->{'protection_bypass.waf_state'}->{'detected'}) {
+        
+        $request = apply_waf_evasion_techniques($self, $mark, $request);
+    }
+    
+    # Apply rate limiting bypass techniques if enabled and rate limiting was detected
+    if (defined $mark->{'protection_bypass.rate_limit_bypass'} && 
+        $mark->{'protection_bypass.rate_limit_bypass'} eq '1' &&
+        $mark->{'protection_bypass.rate_limit_state'}->{'detected'}) {
+        
+        $request = apply_rate_limit_bypass_techniques($self, $mark, $request);
+    }
+    
+    return $request;
+}
+
+# Apply CAPTCHA bypass techniques
+sub apply_captcha_bypass_techniques {
+    my ($self, $mark, $request) = @_;
+    
+    # If we have a last successful technique, try it first
+    if ($mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'}) {
+        my $technique = $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'};
+        $request = $technique->{'apply'}->($self, $mark, $request);
+    }
+    # Otherwise try all techniques
+    else {
+        foreach my $technique (@{$mark->{'protection_bypass.captcha_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request);
+        }
+    }
+    
+    $mark->{'protection_bypass.captcha_state'}->{'bypass_attempts'}++;
+    
+    return $request;
+}
+
+# Apply WAF evasion techniques
+sub apply_waf_evasion_techniques {
+    my ($self, $mark, $request) = @_;
+    
+    # If we have a last successful technique, try it first
+    if ($mark->{'protection_bypass.waf_state'}->{'last_successful_technique'}) {
+        my $technique = $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'};
+        $request = $technique->{'apply'}->($self, $mark, $request);
+    }
+    # Otherwise try techniques based on WAF type
+    else {
+        my $waf_type = $mark->{'protection_bypass.waf_state'}->{'waf_type'} || "Unknown";
+        
+        # Apply techniques based on WAF type
+        foreach my $technique (@{$mark->{'protection_bypass.waf_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request, $waf_type);
+        }
+    }
+    
+    $mark->{'protection_bypass.waf_state'}->{'bypass_attempts'}++;
+    
+    return $request;
+}
+
+# Apply rate limiting bypass techniques
+sub apply_rate_limit_bypass_techniques {
+    my ($self, $mark, $request) = @_;
+    
+    # If we have a last successful technique, try it first
+    if ($mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'}) {
+        my $technique = $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'};
+        $request = $technique->{'apply'}->($self, $mark, $request);
+    }
+    # Otherwise try all techniques
+    else {
+        foreach my $technique (@{$mark->{'protection_bypass.rate_limit_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request);
+        }
+    }
+    
+    $mark->{'protection_bypass.rate_limit_state'}->{'bypass_attempts'}++;
+    
+    return $request;
+}
+
+# Analyze response for protection mechanisms
+sub analyze_protection_response {
+    my ($self, $mark, $response, $content, $request) = @_;
+    
+    # Skip if no protection bypass is enabled
+    return unless (
+        (defined $mark->{'protection_bypass.captcha_bypass'} && $mark->{'protection_bypass.captcha_bypass'} eq '1') ||
+        (defined $mark->{'protection_bypass.waf_evasion'} && $mark->{'protection_bypass.waf_evasion'} eq '1') ||
+        (defined $mark->{'protection_bypass.rate_limit_bypass'} && $mark->{'protection_bypass.rate_limit_bypass'} eq '1')
+    );
+    
+    # Check for CAPTCHA
+    if (defined $mark->{'protection_bypass.captcha_bypass'} && $mark->{'protection_bypass.captcha_bypass'} eq '1') {
+        detect_captcha($self, $mark, $response, $content);
+    }
+    
+    # Check for WAF
+    if (defined $mark->{'protection_bypass.waf_evasion'} && $mark->{'protection_bypass.waf_evasion'} eq '1') {
+        detect_waf($self, $mark, $response, $content);
+    }
+    
+    # Check for rate limiting
+    if (defined $mark->{'protection_bypass.rate_limit_bypass'} && $mark->{'protection_bypass.rate_limit_bypass'} eq '1') {
+        detect_rate_limiting($self, $mark, $response, $content);
+    }
+    
+    # Handle smart retry if enabled and request was blocked
+    if (defined $mark->{'protection_bypass.smart_retry'} && 
+        $mark->{'protection_bypass.smart_retry'} eq '1' &&
+        is_request_blocked($self, $mark, $response, $content)) {
+        
+        handle_smart_retry($self, $mark, $request, $response, $content);
+    }
+    
+    return;
+}
+
+# Detect CAPTCHA in response
+sub detect_captcha {
+    my ($self, $mark, $response, $content) = @_;
+    
+    # Skip if no content
+    return unless $content;
+    
+    # Check for CAPTCHA patterns in content
+    foreach my $pattern (@{$mark->{'protection_bypass.captcha_patterns'}}) {
+        if ($content =~ $pattern) {
+            $mark->{'protection_bypass.captcha_state'}->{'detected'} = 1;
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "CAPTCHA detected: $pattern\n";
+            return;
+        }
+    }
+    
+    # If we got here and CAPTCHA was previously detected, and we made a bypass attempt,
+    # then the bypass might have been successful
+    if ($mark->{'protection_bypass.captcha_state'}->{'detected'} && 
+        $mark->{'protection_bypass.captcha_state'}->{'bypass_attempts'} > 0) {
+        
+        $mark->{'protection_bypass.captcha_state'}->{'successful_bypasses'}++;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "CAPTCHA bypass successful\n";
+        
+        # Store the last successful technique
+        if ($mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'}) {
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Successful technique: " . 
+                $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'}->{'name'} . "\n";
+        }
+    }
+    
+    return;
+}
+
+# Detect WAF in response
+sub detect_waf {
+    my ($self, $mark, $response, $content) = @_;
+    
+    # Skip if no response or content
+    return unless ($response || $content);
+    
+    # Check for WAF block patterns
+    my $waf_blocked = 0;
+    my $waf_name = "Unknown";
+    
+    # Common WAF block response codes
+    if ($response && ($response->{'code'} == 403 || $response->{'code'} == 406 || $response->{'code'} == 429 || $response->{'code'} == 503)) {
+        # Check headers for WAF signatures
+        foreach my $header (keys %{$response}) {
+            foreach my $waf (@{$mark->{'protection_bypass.waf_patterns'}}) {
+                if ($response->{$header} =~ $waf->{'pattern'}) {
+                    $waf_blocked = 1;
+                    $waf_name = $waf->{'name'};
+                    last;
+                }
+            }
+            last if $waf_blocked;
+        }
+        
+        # Check content for WAF block messages
+        if (!$waf_blocked && $content) {
+            if ($content =~ /blocked|forbidden|unauthorized|security|firewall|protection|waf/i) {
+                $waf_blocked = 1;
+                
+                # Try to identify the WAF
+                foreach my $waf (@{$mark->{'protection_bypass.waf_patterns'}}) {
+                    if ($content =~ $waf->{'pattern'}) {
+                        $waf_name = $waf->{'name'};
+                        last;
+                    }
+                }
+            }
+        }
+    }
+    
+    # Update WAF state if blocked
+    if ($waf_blocked) {
+        $mark->{'protection_bypass.waf_state'}->{'detected'} = 1;
+        $mark->{'protection_bypass.waf_state'}->{'waf_type'} = $waf_name;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Request blocked by WAF: $waf_name\n";
+    }
+    # If we got here and WAF was previously detected as blocking, and we made a bypass attempt,
+    # then the bypass might have been successful
+    elsif ($mark->{'protection_bypass.waf_state'}->{'detected'} && 
+           $mark->{'protection_bypass.waf_state'}->{'bypass_attempts'} > 0) {
+        
+        $mark->{'protection_bypass.waf_state'}->{'successful_bypasses'}++;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "WAF bypass successful\n";
+        
+        # Store the last successful technique
+        if ($mark->{'protection_bypass.waf_state'}->{'last_successful_technique'}) {
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Successful technique: " . 
+                $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'}->{'name'} . "\n";
+        }
+    }
+    
+    return;
+}
+
+# Detect rate limiting in response
+sub detect_rate_limiting {
+    my ($self, $mark, $response, $content) = @_;
+    
+    # Skip if no response or content
+    return unless ($response || $content);
+    
+    # Check for rate limiting response codes
+    my $rate_limited = 0;
+    
+    # Common rate limiting response codes
+    if ($response && ($response->{'code'} == 429 || $response->{'code'} == 503)) {
+        $rate_limited = 1;
+    }
+    
+    # Check content for rate limiting messages
+    if (!$rate_limited && $content) {
+        foreach my $pattern (@{$mark->{'protection_bypass.rate_limit_patterns'}}) {
+            if ($content =~ $pattern) {
+                $rate_limited = 1;
+                $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Rate limiting detected: $pattern\n";
+                last;
+            }
+        }
+    }
+    
+    # Update rate limiting state if detected
+    if ($rate_limited) {
+        $mark->{'protection_bypass.rate_limit_state'}->{'detected'} = 1;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Request rate limited\n";
+        
+        # Increase delay for exponential backoff
+        $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} *= 2;
+        if ($mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} > 60) {
+            $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} = 60;  # Cap at 60 seconds
+        }
+    }
+    # If we got here and rate limiting was previously detected, and we made a bypass attempt,
+    # then the bypass might have been successful
+    elsif ($mark->{'protection_bypass.rate_limit_state'}->{'detected'} && 
+           $mark->{'protection_bypass.rate_limit_state'}->{'bypass_attempts'} > 0) {
+        
+        $mark->{'protection_bypass.rate_limit_state'}->{'successful_bypasses'}++;
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Rate limiting bypass successful\n";
+        
+        # Reset delay
+        $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} = 1;
+        
+        # Store the last successful technique
+        if ($mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'}) {
+            $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Successful technique: " . 
+                $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'}->{'name'} . "\n";
+        }
+    }
+    
+    return;
+}
+
+# Check if request was blocked
+sub is_request_blocked {
+    my ($self, $mark, $response, $content) = @_;
+    
+    # Skip if no response
+    return 0 unless $response;
+    
+    # Check for common block response codes
+    if ($response->{'code'} == 403 || $response->{'code'} == 406 || $response->{'code'} == 429 || $response->{'code'} == 503) {
+        return 1;
+    }
+    
+    # Check content for block messages
+    if ($content && $content =~ /blocked|forbidden|unauthorized|security|firewall|protection|waf|captcha|human|verification|rate\s+limit/i) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+# Handle smart retry for blocked requests
+sub handle_smart_retry {
+    my ($self, $mark, $request, $response, $content) = @_;
+    
+    # Initialize retry count for this request if not exists
+    $request->{'retry_count'} = 0 unless defined $request->{'retry_count'};
+    
+    # Check if we've reached max retries
+    if ($request->{'retry_count'} >= $mark->{'protection_bypass.max_retries'}) {
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Max retries reached for request\n";
+        return;
+    }
+    
+    # Increment retry count
+    $request->{'retry_count'}++;
+    
+    $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Smart retry attempt " . $request->{'retry_count'} . 
+                                                     " for blocked request\n";
+    
+    # Apply more aggressive bypass techniques
+    if ($mark->{'protection_bypass.captcha_state'}->{'detected'}) {
+        # Try all CAPTCHA bypass techniques
+        foreach my $technique (@{$mark->{'protection_bypass.captcha_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request);
+        }
+    }
+    
+    if ($mark->{'protection_bypass.waf_state'}->{'detected'}) {
+        # Try all WAF evasion techniques
+        foreach my $technique (@{$mark->{'protection_bypass.waf_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request);
+        }
+    }
+    
+    if ($mark->{'protection_bypass.rate_limit_state'}->{'detected'}) {
+        # Apply exponential backoff
+        my $delay = $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'};
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Applying delay of $delay seconds before retry\n";
+        sleep($delay);
+        
+        # Try all rate limiting bypass techniques
+        foreach my $technique (@{$mark->{'protection_bypass.rate_limit_techniques'}}) {
+            $request = $technique->{'apply'}->($self, $mark, $request);
+        }
+    }
+    
+    # Retry the request
+    my ($res, $new_content, $error, $new_request, $new_response) = 
+        LW2::http_request($request->{'whisker'}->{'uri'}, $request->{'whisker'}->{'method'}, 
+                         $request->{'whisker'}->{'data'}, $request->{'whisker'}->{'header'}, 
+                         '', '', 'protection_bypass');
+    
+    # Check if retry was successful
+    if ($new_response && !is_request_blocked($self, $mark, $new_response, $new_content)) {
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Smart retry successful\n";
+        
+        # Update response and content with successful retry
+        %{$response} = %{$new_response};
+        $$content = $new_content;
+    }
+    else {
+        $mark->{'PLUGIN_REPORT'}->{'protection_bypass'} .= "Smart retry failed\n";
+    }
+    
+    return;
+}
+
+# CAPTCHA bypass technique implementations
+
+sub apply_header_manipulation {
+    my ($self, $mark, $request) = @_;
+    
+    # Add common browser headers
+    $request->{'whisker'}->{'header'}->{'Accept'} = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8';
+    $request->{'whisker'}->{'header'}->{'Accept-Language'} = 'en-US,en;q=0.5';
+    $request->{'whisker'}->{'header'}->{'Accept-Encoding'} = 'gzip, deflate';
+    $request->{'whisker'}->{'header'}->{'DNT'} = '1';
+    $request->{'whisker'}->{'header'}->{'Connection'} = 'keep-alive';
+    $request->{'whisker'}->{'header'}->{'Upgrade-Insecure-Requests'} = '1';
+    $request->{'whisker'}->{'header'}->{'Cache-Control'} = 'max-age=0';
+    
+    # Add referer from the same domain
+    my $uri = $request->{'whisker'}->{'uri'};
+    if ($uri =~ m{^(https?://[^/]+)}) {
+        $request->{'whisker'}->{'header'}->{'Referer'} = $1 . '/';
+    }
+    
+    $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'} = {
+        name => "Header Manipulation",
+        apply => \&apply_header_manipulation
+    };
+    
+    return $request;
+}
+
+sub apply_cookie_preservation {
+    my ($self, $mark, $request) = @_;
+    
+    # Get the URI host
+    my $uri = $request->{'whisker'}->{'uri'};
+    my $host = '';
+    if ($uri =~ m{^https?://([^/]+)}) {
+        $host = $1;
+    }
+    
+    # If we have cookies for this host, add them to the request
+    if ($host && exists $mark->{'protection_bypass.captcha_state'}->{'cookies'}->{$host}) {
+        $request->{'whisker'}->{'header'}->{'Cookie'} = $mark->{'protection_bypass.captcha_state'}->{'cookies'}->{$host};
+    }
+    
+    $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'} = {
+        name => "Cookie Preservation",
+        apply => \&apply_cookie_preservation
+    };
+    
+    return $request;
+}
+
+sub apply_js_emulation {
+    my ($self, $mark, $request) = @_;
+    
+    # This is a placeholder for JavaScript emulation
+    # In a real implementation, this would parse and execute simple JavaScript challenges
+    
+    # Add headers that suggest JavaScript is enabled
+    $request->{'whisker'}->{'header'}->{'X-Requested-With'} = 'XMLHttpRequest';
+    
+    $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'} = {
+        name => "JavaScript Emulation",
+        apply => \&apply_js_emulation
+    };
+    
+    return $request;
+}
+
+sub apply_fingerprint_spoofing {
+    my ($self, $mark, $request) = @_;
+    
+    # Add headers that mimic browser fingerprinting
+    $request->{'whisker'}->{'header'}->{'Sec-Ch-Ua'} = '"Google Chrome";v="91", " Not;A Brand";v="99", "Chromium";v="91"';
+    $request->{'whisker'}->{'header'}->{'Sec-Ch-Ua-Mobile'} = '?0';
+    $request->{'whisker'}->{'header'}->{'Sec-Ch-Ua-Platform'} = '"Windows"';
+    $request->{'whisker'}->{'header'}->{'Sec-Fetch-Dest'} = 'document';
+    $request->{'whisker'}->{'header'}->{'Sec-Fetch-Mode'} = 'navigate';
+    $request->{'whisker'}->{'header'}->{'Sec-Fetch-Site'} = 'none';
+    $request->{'whisker'}->{'header'}->{'Sec-Fetch-User'} = '?1';
+    
+    $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'} = {
+        name => "Browser Fingerprint Spoofing",
+        apply => \&apply_fingerprint_spoofing
+    };
+    
+    return $request;
+}
+
+sub apply_request_variation {
+    my ($self, $mark, $request) = @_;
+    
+    # Vary request patterns by adding random query parameters
+    my $uri = $request->{'whisker'}->{'uri'};
+    if ($uri !~ /\?/) {
+        $uri .= '?';
+    }
+    else {
+        $uri .= '&';
+    }
+    
+    # Add a random parameter
+    $uri .= 'nocache=' . int(rand(1000000));
+    $request->{'whisker'}->{'uri'} = $uri;
+    
+    $mark->{'protection_bypass.captcha_state'}->{'last_successful_technique'} = {
+        name => "Request Pattern Variation",
+        apply => \&apply_request_variation
+    };
+    
+    return $request;
+}
+
+# WAF evasion technique implementations
+
+sub apply_payload_obfuscation {
+    my ($self, $mark, $request, $waf_type) = @_;
+    
+    # This is a placeholder for payload obfuscation
+    # In a real implementation, this would obfuscate payloads based on WAF type
+    
+    $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'} = {
+        name => "Payload Obfuscation",
+        apply => \&apply_payload_obfuscation
+    };
+    
+    return $request;
+}
+
+sub apply_request_fragmentation {
+    my ($self, $mark, $request) = @_;
+    
+    # This is a placeholder for request fragmentation
+    # In a real implementation, this would split requests to evade pattern matching
+    
+    $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'} = {
+        name => "Request Fragmentation",
+        apply => \&apply_request_fragmentation
+    };
+    
+    return $request;
+}
+
+sub apply_parameter_pollution {
+    my ($self, $mark, $request) = @_;
+    
+    # Apply parameter pollution to confuse WAF parsers
+    my $uri = $request->{'whisker'}->{'uri'};
+    
+    # Extract query parameters
+    my ($base_uri, $query) = split(/\?/, $uri, 2);
+    if ($query) {
+        my @params = split(/&/, $query);
+        my %param_values;
+        
+        # Parse parameters
+        foreach my $param (@params) {
+            my ($name, $value) = split(/=/, $param, 2);
+            $param_values{$name} = $value if $name;
+        }
+        
+        # Apply parameter pollution by duplicating parameters
+        my $new_query = '';
+        foreach my $name (keys %param_values) {
+            $new_query .= "&$name=" . $param_values{$name};
+            $new_query .= "&$name=" . $param_values{$name};  # Duplicate
+        }
+        
+        $new_query =~ s/^&//;  # Remove leading &
+        $uri = $base_uri . '?' . $new_query;
+        $request->{'whisker'}->{'uri'} = $uri;
+    }
+    
+    $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'} = {
+        name => "Parameter Pollution",
+        apply => \&apply_parameter_pollution
+    };
+    
+    return $request;
+}
+
+sub apply_method_switching {
+    my ($self, $mark, $request) = @_;
+    
+    # Switch HTTP method to bypass method-specific rules
+    my $method = $request->{'whisker'}->{'method'};
+    
+    # If method is GET, try with POST and vice versa
+    if ($method eq 'GET') {
+        $request->{'whisker'}->{'method'} = 'POST';
+        $request->{'whisker'}->{'header'}->{'Content-Type'} = 'application/x-www-form-urlencoded';
+        
+        # Move query parameters to POST data
+        my $uri = $request->{'whisker'}->{'uri'};
+        my ($base_uri, $query) = split(/\?/, $uri, 2);
+        if ($query) {
+            $request->{'whisker'}->{'data'} = $query;
+            $request->{'whisker'}->{'uri'} = $base_uri;
+        }
+    }
+    elsif ($method eq 'POST') {
+        $request->{'whisker'}->{'method'} = 'GET';
+        
+        # Move POST data to query parameters
+        my $uri = $request->{'whisker'}->{'uri'};
+        my $data = $request->{'whisker'}->{'data'};
+        if ($data) {
+            if ($uri =~ /\?/) {
+                $uri .= '&' . $data;
+            }
+            else {
+                $uri .= '?' . $data;
+            }
+            $request->{'whisker'}->{'uri'} = $uri;
+            $request->{'whisker'}->{'data'} = '';
+        }
+    }
+    
+    $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'} = {
+        name => "HTTP Method Switching",
+        apply => \&apply_method_switching
+    };
+    
+    return $request;
+}
+
+sub apply_encoding_variation {
+    my ($self, $mark, $request) = @_;
+    
+    # Apply different encodings to bypass pattern matching
+    my $uri = $request->{'whisker'}->{'uri'};
+    
+    # URL encode special characters twice
+    $uri =~ s/([<>'";\(\)&])/sprintf("%%%02X", ord($1))/ge;
+    
+    $request->{'whisker'}->{'uri'} = $uri;
+    
+    $mark->{'protection_bypass.waf_state'}->{'last_successful_technique'} = {
+        name => "Encoding Variation",
+        apply => \&apply_encoding_variation
+    };
+    
+    return $request;
+}
+
+# Rate limiting bypass technique implementations
+
+sub apply_request_throttling {
+    my ($self, $mark, $request) = @_;
+    
+    # Apply dynamic request throttling
+    my $delay = $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'};
+    sleep($delay) if $delay > 0;
+    
+    $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'} = {
+        name => "Request Throttling",
+        apply => \&apply_request_throttling
+    };
+    
+    return $request;
+}
+
+sub apply_ip_rotation {
+    my ($self, $mark, $request) = @_;
+    
+    # This is handled by the anonymity plugin, but we'll set it as the successful technique
+    $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'} = {
+        name => "IP Rotation",
+        apply => \&apply_ip_rotation
+    };
+    
+    return $request;
+}
+
+sub apply_distributed_scanning {
+    my ($self, $mark, $request) = @_;
+    
+    # This is a placeholder for distributed scanning
+    # In a real implementation, this would distribute scanning across multiple sources
+    
+    $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'} = {
+        name => "Distributed Scanning",
+        apply => \&apply_distributed_scanning
+    };
+    
+    return $request;
+}
+
+sub apply_header_rotation {
+    my ($self, $mark, $request) = @_;
+    
+    # Rotate headers to appear as different clients
+    my @user_agents = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59"
+    );
+    
+    # Set a random user agent
+    $request->{'whisker'}->{'header'}->{'User-Agent'} = $user_agents[int(rand(scalar @user_agents))];
+    
+    # Vary other headers
+    $request->{'whisker'}->{'header'}->{'Accept-Language'} = 
+        ('en-US,en;q=0.9', 'en-GB,en;q=0.8', 'fr-FR,fr;q=0.9', 'de-DE,de;q=0.8', 'es-ES,es;q=0.9')[int(rand(5))];
+    
+    $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'} = {
+        name => "Header Rotation",
+        apply => \&apply_header_rotation
+    };
+    
+    return $request;
+}
+
+sub apply_exponential_backoff {
+    my ($self, $mark, $request) = @_;
+    
+    # Apply exponential backoff
+    my $delay = $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'};
+    sleep($delay) if $delay > 0;
+    
+    # Increase delay for next request
+    $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} *= 2;
+    if ($mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} > 60) {
+        $mark->{'protection_bypass.rate_limit_state'}->{'current_delay'} = 60;  # Cap at 60 seconds
+    }
+    
+    $mark->{'protection_bypass.rate_limit_state'}->{'last_successful_technique'} = {
+        name => "Exponential Backoff",
+        apply => \&apply_exponential_backoff
+    };
+    
+    return $request;
+}
+
+1;

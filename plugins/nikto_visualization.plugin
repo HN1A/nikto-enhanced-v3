@@ -1,0 +1,454 @@
+#!/usr/bin/perl
+#
+# Enhanced Nikto Visualization Plugin
+# (c) 2025 Enhanced Nikto Project
+#
+# This plugin adds visualization components to Nikto
+# including ASCII art banners, progress visualization, and results charts.
+#
+
+use strict;
+
+# Plugin register function
+sub nikto_visualization_register {
+    my $id = { 
+        name        => "visualization",
+        full_name   => "Visualization Module",
+        author      => "Enhanced Nikto Project",
+        description => "Provides visualization components including ASCII art banners, progress visualization, and results charts",
+        version     => "1.0",
+        hooks       => {
+                         start => { method => \&display_banner, weight => 1, },
+                         scan => { method => \&update_progress, },
+                         finish => { method => \&display_results_chart, },
+                       },
+        options => {
+                     banner_style => "Banner style (1-5, random if not specified)",
+                     color => "Enable color output (1=on, 0=off)",
+                     progress_bar => "Show progress bar (1=on, 0=off)",
+                     results_chart => "Show results chart (1=on, 0=off)",
+                   }
+    };
+    
+    return $id;
+}
+
+# Display banner at start
+sub display_banner {
+    my ($self, $mark) = @_;
+    
+    # Initialize visualization report
+    $mark->{'PLUGIN_REPORT'}->{'visualization'} = "Visualization Module Report:\n";
+    
+    # Set default options if not specified
+    $mark->{'visualization.color'} = 1 unless defined $mark->{'visualization.color'};
+    $mark->{'visualization.progress_bar'} = 1 unless defined $mark->{'visualization.progress_bar'};
+    $mark->{'visualization.results_chart'} = 1 unless defined $mark->{'visualization.results_chart'};
+    
+    # Select banner style
+    my $banner_style = $mark->{'visualization.banner_style'};
+    if (!defined $banner_style || $banner_style !~ /^[1-5]$/) {
+        $banner_style = int(rand(5)) + 1;  # Random style between 1-5
+    }
+    
+    # Display the banner
+    my $banner = get_banner($banner_style);
+    my $colored_banner = $mark->{'visualization.color'} eq '1' ? colorize_banner($banner) : $banner;
+    
+    print "\n$colored_banner\n";
+    
+    # Add version and scan info
+    my $version_info = "Enhanced Nikto v" . $mark->{'VARIABLES'}->{'version'} . " - Advanced Web Server Scanner";
+    my $target_info = "Target: " . $mark->{'hostname'};
+    my $time_info = "Scan started at: " . localtime(time);
+    
+    print "\n$version_info\n$target_info\n$time_info\n\n";
+    
+    # Initialize progress tracking
+    $mark->{'visualization.progress'} = {
+        start_time => time(),
+        total_tests => scalar @{$mark->{'TESTS'}},
+        completed_tests => 0,
+        last_update => time(),
+        vulnerabilities_found => 0
+    };
+    
+    # Display initial progress bar
+    if ($mark->{'visualization.progress_bar'} eq '1') {
+        display_progress_bar($mark);
+    }
+    
+    return $mark;
+}
+
+# Get ASCII art banner based on style
+sub get_banner {
+    my ($style) = @_;
+    
+    my $banner = "";
+    
+    if ($style == 1) {
+        # Cyberpunk style
+        $banner = <<'EOB';
+ ███▄    █  ██▓ ██ ▄█▀▄▄▄█████▓ ▒█████      ▓█████  ███▄    █  ██░ ██  ▄▄▄       ███▄    █  ▄████▄  ▓█████ ▓█████▄ 
+ ██ ▀█   █ ▓██▒ ██▄█▒ ▓  ██▒ ▓▒▒██▒  ██▒    ▓█   ▀  ██ ▀█   █ ▓██░ ██▒▒████▄     ██ ▀█   █ ▒██▀ ▀█  ▓█   ▀ ▒██▀ ██▌
+▓██  ▀█ ██▒▒██▒▓███▄░ ▒ ▓██░ ▒░▒██░  ██▒    ▒███   ▓██  ▀█ ██▒▒██▀▀██░▒██  ▀█▄  ▓██  ▀█ ██▒▒▓█    ▄ ▒███   ░██   █▌
+▓██▒  ▐▌██▒░██░▓██ █▄ ░ ▓██▓ ░ ▒██   ██░    ▒▓█  ▄ ▓██▒  ▐▌██▒░▓█ ░██ ░██▄▄▄▄██ ▓██▒  ▐▌██▒▒▓▓▄ ▄██▒▒▓█  ▄ ░▓█▄   ▌
+▒██░   ▓██░░██░▒██▒ █▄  ▒██▒ ░ ░ ████▓▒░    ░▒████▒▒██░   ▓██░░▓█▒░██▓ ▓█   ▓██▒▒██░   ▓██░▒ ▓███▀ ░░▒████▒░▒████▓ 
+░ ▒░   ▒ ▒ ░▓  ▒ ▒▒ ▓▒  ▒ ░░   ░ ▒░▒░▒░     ░░ ▒░ ░░ ▒░   ▒ ▒  ▒ ░░▒░▒ ▒▒   ▓▒█░░ ▒░   ▒ ▒ ░ ░▒ ▒  ░░░ ▒░ ░ ▒▒▓  ▒ 
+░ ░░   ░ ▒░ ▒ ░░ ░▒ ▒░    ░      ░ ▒ ▒░      ░ ░  ░░ ░░   ░ ▒░ ▒ ░▒░ ░  ▒   ▒▒ ░░ ░░   ░ ▒░  ░  ▒    ░ ░  ░ ░ ▒  ▒ 
+   ░   ░ ░  ▒ ░░ ░░ ░   ░      ░ ░ ░ ▒         ░      ░   ░ ░  ░  ░░ ░  ░   ▒      ░   ░ ░ ░           ░    ░ ░  ░ 
+         ░  ░  ░  ░                ░ ░         ░  ░         ░  ░  ░  ░      ░  ░         ░ ░ ░         ░  ░   ░    
+                                                                                            ░                 ░      
+EOB
+    }
+    elsif ($style == 2) {
+        # Hacker style
+        $banner = <<'EOB';
+ ▐ ▄ ▪  ▄ •▄ ▄▄▄▄▄      ▄▄▄ . ▐ ▄ ▄ •▄  ▄▄▄·  ▐ ▄  ▄▄· ▄▄▄ .·▄▄▄▄  
+•█▌▐███ █▌▄▌▪•██  ▪     ▀▄.▀·•█▌▐██▌▄▌▪▐█ ▀█ •█▌▐█▐█ ▌▪▀▄.▀·██▪ ██ 
+▐█▐▐▌▐█·▐▀▀▄· ▐█.▪ ▄█▀▄ ▐▀▀▪▄▐█▐▐▌▐▀▀▄·▄█▀▀█ ▐█▐▐▌██ ▄▄▐▀▀▪▄▐█· ▐█▌
+██▐█▌▐█▌▐█.█▌ ▐█▌·▐█▌.▐▌▐█▄▄▌██▐█▌▐█.█▌▐█ ▪▐▌██▐█▌▐███▌▐█▄▄▌██. ██ 
+▀▀ █▪▀▀▀·▀  ▀ ▀▀▀  ▀█▄▀▪ ▀▀▀ ▀▀ █▪·▀  ▀ ▀  ▀ ▀▀ █▪·▀▀▀  ▀▀▀ ▀▀▀▀▀• 
+EOB
+    }
+    elsif ($style == 3) {
+        # Futuristic style
+        $banner = <<'EOB';
+╔═╗┌┐┌┬ ┬┌─┐┌┐┌┌─┐┌─┐┌┬┐  ╔╗╔┬┌─┌┬┐┌─┐
+║╣ │││├─┤├─┤││││  ├┤  ││  ║║║├┴┐ │ │ │
+╚═╝┘└┘┴ ┴┴ ┴┘└┘└─┘└─┘─┴┘  ╝╚╝┴ ┴ ┴ └─┘
+╔═╗┌┬┐┬  ┬┌─┐┌┐┌┌─┐┌─┐┌┬┐  ╔═╗┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐
+╠═╣ ││└┐┌┘├─┤││││  ├┤  ││  ╚═╗│  ├─┤││││││├┤ ├┬┘
+╩ ╩─┴┘ └┘ ┴ ┴┘└┘└─┘└─┘─┴┘  ╚═╝└─┘┴ ┴┘└┘┘└┘└─┘┴└─
+EOB
+    }
+    elsif ($style == 4) {
+        # Matrix style
+        $banner = <<'EOB';
+ ██████   █████  ███████ ██   ██ ███████ ██████  
+██       ██   ██ ██      ██  ██  ██      ██   ██ 
+██   ███ ███████ █████   █████   █████   ██████  
+██    ██ ██   ██ ██      ██  ██  ██      ██   ██ 
+ ██████  ██   ██ ███████ ██   ██ ███████ ██   ██ 
+                                                 
+ ███    ██ ██ ██   ██ ████████  ██████           
+ ████   ██ ██ ██  ██     ██    ██    ██          
+ ██ ██  ██ ██ █████      ██    ██    ██          
+ ██  ██ ██ ██ ██  ██     ██    ██    ██          
+ ██   ████ ██ ██   ██    ██     ██████           
+EOB
+    }
+    elsif ($style == 5) {
+        # Minimalist style
+        $banner = <<'EOB';
+ _   _ _ _    _        
+| \ | (_) | _| |_ ___  
+|  \| | | |/ / __/ _ \ 
+| |\  | |   <| || (_) |
+|_| \_|_|_|\_\\__\___/ 
+                       
+ _____      _                        _   
+| ____|_ _| |__   __ _ _ __   ___ ___| |_ 
+|  _| | '_ \ '_ \ / _` | '_ \ / __/ _ \ __|
+| |___| | | | | | | (_| | | | | (_|  __/ |_ 
+|_____|_| |_|_| |_|\__,_|_| |_|\___\___|\__|
+EOB
+    }
+    
+    return $banner;
+}
+
+# Colorize banner
+sub colorize_banner {
+    my ($banner) = @_;
+    
+    # ANSI color codes
+    my $reset = "\e[0m";
+    my @colors = (
+        "\e[31m",  # Red
+        "\e[32m",  # Green
+        "\e[33m",  # Yellow
+        "\e[34m",  # Blue
+        "\e[35m",  # Magenta
+        "\e[36m",  # Cyan
+    );
+    
+    # Apply random colors to each line
+    my @lines = split(/\n/, $banner);
+    my $colored_banner = "";
+    
+    foreach my $line (@lines) {
+        my $color = $colors[int(rand(scalar @colors))];
+        $colored_banner .= "$color$line$reset\n";
+    }
+    
+    return $colored_banner;
+}
+
+# Update progress during scanning
+sub update_progress {
+    my ($self, $mark) = @_;
+    
+    # Skip if progress bar is disabled
+    return $mark unless $mark->{'visualization.progress_bar'} eq '1';
+    
+    # Update progress tracking
+    $mark->{'visualization.progress'}->{'completed_tests'}++;
+    $mark->{'visualization.progress'}->{'vulnerabilities_found'} = scalar @{$mark->{'VULNS'}} if defined $mark->{'VULNS'};
+    
+    # Update progress bar every second
+    my $current_time = time();
+    if ($current_time - $mark->{'visualization.progress'}->{'last_update'} >= 1) {
+        display_progress_bar($mark);
+        $mark->{'visualization.progress'}->{'last_update'} = $current_time;
+    }
+    
+    return $mark;
+}
+
+# Display progress bar
+sub display_progress_bar {
+    my ($mark) = @_;
+    
+    # Calculate progress
+    my $total = $mark->{'visualization.progress'}->{'total_tests'};
+    my $completed = $mark->{'visualization.progress'}->{'completed_tests'};
+    my $percent = $total > 0 ? int(($completed / $total) * 100) : 0;
+    
+    # Calculate elapsed time
+    my $elapsed = time() - $mark->{'visualization.progress'}->{'start_time'};
+    my $elapsed_str = format_time($elapsed);
+    
+    # Calculate estimated time remaining
+    my $eta = 0;
+    if ($completed > 0) {
+        $eta = ($elapsed / $completed) * ($total - $completed);
+    }
+    my $eta_str = format_time($eta);
+    
+    # Create progress bar
+    my $bar_width = 50;
+    my $filled_width = int(($percent / 100) * $bar_width);
+    my $empty_width = $bar_width - $filled_width;
+    
+    my $bar = "[";
+    $bar .= "=" x $filled_width;
+    $bar .= ">" if $filled_width < $bar_width;
+    $bar .= " " x ($empty_width - ($filled_width < $bar_width ? 1 : 0));
+    $bar .= "]";
+    
+    # Create status line
+    my $status = sprintf("%s %3d%% | %d/%d tests | %d vulns | Elapsed: %s | ETA: %s",
+                        $bar, $percent, $completed, $total,
+                        $mark->{'visualization.progress'}->{'vulnerabilities_found'},
+                        $elapsed_str, $eta_str);
+    
+    # Clear line and print status
+    print "\r" . " " x 100 . "\r$status";
+    
+    return;
+}
+
+# Format time in HH:MM:SS
+sub format_time {
+    my ($seconds) = @_;
+    
+    my $hours = int($seconds / 3600);
+    my $minutes = int(($seconds % 3600) / 60);
+    my $secs = $seconds % 60;
+    
+    return sprintf("%02d:%02d:%02d", $hours, $minutes, $secs);
+}
+
+# Display results chart at the end of the scan
+sub display_results_chart {
+    my ($self, $mark) = @_;
+    
+    # Skip if results chart is disabled
+    return $mark unless $mark->{'visualization.results_chart'} eq '1';
+    
+    # Clear progress bar line
+    print "\r" . " " x 100 . "\r";
+    
+    # Print a separator
+    print "\n" . "=" x 80 . "\n";
+    
+    # Print scan summary
+    my $elapsed = time() - $mark->{'visualization.progress'}->{'start_time'};
+    my $elapsed_str = format_time($elapsed);
+    
+    print "\nScan completed in $elapsed_str\n\n";
+    
+    # Count vulnerabilities by severity
+    my %severity_counts = (
+        'High' => 0,
+        'Medium' => 0,
+        'Low' => 0,
+        'Info' => 0
+    );
+    
+    # Count vulnerabilities by type
+    my %type_counts = ();
+    
+    # Process vulnerabilities
+    if (defined $mark->{'VULNS'}) {
+        foreach my $vuln (@{$mark->{'VULNS'}}) {
+            # Determine severity based on vulnerability description
+            my $severity = "Info";
+            if ($vuln->{'VULNERABILITY'} =~ /critical|high|dangerous|remote code|injection|overflow|traversal|backdoor/i) {
+                $severity = "High";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /medium|moderate|cross-site|disclosure|weak|missing header/i) {
+                $severity = "Medium";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /low|information|version|banner/i) {
+                $severity = "Low";
+            }
+            
+            $severity_counts{$severity}++;
+            
+            # Determine type
+            my $type = "Other";
+            if ($vuln->{'VULNERABILITY'} =~ /SQL|injection/i) {
+                $type = "Injection";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /XSS|cross-site/i) {
+                $type = "XSS";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /header|security header/i) {
+                $type = "Headers";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /information disclosure|leak/i) {
+                $type = "Info Disclosure";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /configuration|default|sample/i) {
+                $type = "Misconfiguration";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /outdated|version/i) {
+                $type = "Outdated Software";
+            }
+            elsif ($vuln->{'VULNERABILITY'} =~ /authentication|password|credential/i) {
+                $type = "Authentication";
+            }
+            
+            $type_counts{$type}++;
+        }
+    }
+    
+    # Display severity chart
+    print "Vulnerability Severity Distribution:\n\n";
+    
+    my $max_count = 0;
+    foreach my $severity (keys %severity_counts) {
+        $max_count = $severity_counts{$severity} if $severity_counts{$severity} > $max_count;
+    }
+    
+    my $chart_width = 40;
+    foreach my $severity ("High", "Medium", "Low", "Info") {
+        my $count = $severity_counts{$severity};
+        my $bar_length = $max_count > 0 ? int(($count / $max_count) * $chart_width) : 0;
+        
+        # Choose color based on severity
+        my $color = "";
+        my $reset = "";
+        
+        if ($mark->{'visualization.color'} eq '1') {
+            $reset = "\e[0m";
+            if ($severity eq "High") {
+                $color = "\e[31m";  # Red
+            }
+            elsif ($severity eq "Medium") {
+                $color = "\e[33m";  # Yellow
+            }
+            elsif ($severity eq "Low") {
+                $color = "\e[32m";  # Green
+            }
+            else {
+                $color = "\e[36m";  # Cyan
+            }
+        }
+        
+        printf("%s%-7s%s [%s%s%s] %d\n", 
+               $color, $severity, $reset,
+               $color, "#" x $bar_length, $reset,
+               $count);
+    }
+    
+    # Display type chart
+    print "\nVulnerability Type Distribution:\n\n";
+    
+    $max_count = 0;
+    foreach my $type (keys %type_counts) {
+        $max_count = $type_counts{$type} if $type_counts{$type} > $max_count;
+    }
+    
+    foreach my $type (sort { $type_counts{$b} <=> $type_counts{$a} } keys %type_counts) {
+        my $count = $type_counts{$type};
+        my $bar_length = $max_count > 0 ? int(($count / $max_count) * $chart_width) : 0;
+        
+        # Choose random color for type
+        my $color = "";
+        my $reset = "";
+        
+        if ($mark->{'visualization.color'} eq '1') {
+            $reset = "\e[0m";
+            my @colors = ("\e[31m", "\e[32m", "\e[33m", "\e[34m", "\e[35m", "\e[36m");
+            $color = $colors[int(rand(scalar @colors))];
+        }
+        
+        printf("%s%-16s%s [%s%s%s] %d\n", 
+               $color, $type, $reset,
+               $color, "#" x $bar_length, $reset,
+               $count);
+    }
+    
+    # Print a separator
+    print "\n" . "=" x 80 . "\n";
+    
+    # Generate ASCII art chart for the report
+    my $ascii_chart = generate_ascii_chart(\%severity_counts, \%type_counts);
+    $mark->{'PLUGIN_REPORT'}->{'visualization'} .= "\nResults Chart:\n\n$ascii_chart\n";
+    
+    return $mark;
+}
+
+# Generate ASCII art chart for the report
+sub generate_ascii_chart {
+    my ($severity_counts, $type_counts) = @_;
+    
+    my $chart = "Vulnerability Severity Distribution:\n\n";
+    
+    my $max_count = 0;
+    foreach my $severity (keys %$severity_counts) {
+        $max_count = $severity_counts->{$severity} if $severity_counts->{$severity} > $max_count;
+    }
+    
+    my $chart_width = 40;
+    foreach my $severity ("High", "Medium", "Low", "Info") {
+        my $count = $severity_counts->{$severity};
+        my $bar_length = $max_count > 0 ? int(($count / $max_count) * $chart_width) : 0;
+        
+        $chart .= sprintf("%-7s [%s] %d\n", 
+                         $severity, "#" x $bar_length, $count);
+    }
+    
+    $chart .= "\nVulnerability Type Distribution:\n\n";
+    
+    $max_count = 0;
+    foreach my $type (keys %$type_counts) {
+        $max_count = $type_counts->{$type} if $type_counts->{$type} > $max_count;
+    }
+    
+    foreach my $type (sort { $type_counts->{$b} <=> $type_counts->{$a} } keys %$type_counts) {
+        my $count = $type_counts->{$type};
+        my $bar_length = $max_count > 0 ? int(($count / $max_count) * $chart_width) : 0;
+        
+        $chart .= sprintf("%-16s [%s] %d\n", 
+                         $type, "#" x $bar_length, $count);
+    }
+    
+    return $chart;
+}
+
+1;
