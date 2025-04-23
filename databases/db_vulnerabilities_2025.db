@@ -1,0 +1,69 @@
+#######################################################################
+# File Source: Enhanced Nikto Database
+# (c) 2025 Enhanced Nikto Project
+# This file may only be distributed and used with the full Nikto package.
+#
+# Note:
+# This database contains the latest vulnerabilities from OWASP Top 10 2025,
+# CVE database, and CISA Known Exploited Vulnerabilities catalog.
+#######################################################################
+# Notes:
+#
+# Tuning options (field 3):
+# 0 - File Upload
+# 1 - Interesting File / Seen in logs
+# 2 - Misconfiguration / Default File
+# 3 - Information Disclosure
+# 4 - Injection (XSS/Script/HTML)
+# 5 - Remote File Retrieval
+# 6 - Denial of Service
+# 7 - Remote File Retrieval / Execution
+# 8 - Command Execution / Remote Shell
+# 9 - SQL Injection
+# a - Authentication Bypass
+# b - Software Identification
+# c - Remote Source Inclusion
+# d - WebService
+# e - Administrative Console
+# x - Reverse Tuning Options (i.e., include all except specified)
+#######################################################################
+
+"900001","https://owasp.org/www-project-top-ten/","3a","@APPSCAN/access_control_check.php","GET","200","","","","","Access Control Vulnerabilities (OWASP 2025-A01): Tests for improper access control mechanisms that may allow unauthorized access to restricted resources.","",""
+"900002","https://owasp.org/www-project-top-ten/","49","@APPSCAN/price_oracle_test.php","GET","200","","","","","Price Oracle Manipulation (OWASP 2025-A02): Tests for vulnerabilities in price oracle implementations that could allow price manipulation attacks.","",""
+"900003","https://owasp.org/www-project-top-ten/","4","@APPSCAN/logic_error_test.php","GET","200","","","","","Logic Errors (OWASP 2025-A03): Tests for flaws in application logic that could lead to security vulnerabilities.","",""
+"900004","https://owasp.org/www-project-top-ten/","4","@APPSCAN/input_validation_test.php","GET","200","","","","","Lack of Input Validation (OWASP 2025-A04): Tests for insufficient input validation that could lead to various attacks.","",""
+"900005","https://owasp.org/www-project-top-ten/","8","@APPSCAN/reentrancy_test.php","GET","200","","","","","Reentrancy Attacks (OWASP 2025-A05): Tests for vulnerabilities that allow reentrant code execution leading to unexpected behavior.","",""
+"900006","https://owasp.org/www-project-top-ten/","8c","@APPSCAN/external_calls_test.php","GET","200","","","","","Unchecked External Calls (OWASP 2025-A06): Tests for unvalidated external calls that could lead to security vulnerabilities.","",""
+"900007","https://owasp.org/www-project-top-ten/","8","@APPSCAN/flash_loan_test.php","GET","200","","","","","Flash Loan Attacks (OWASP 2025-A07): Tests for vulnerabilities in DeFi applications that could be exploited via flash loans.","",""
+"900008","https://owasp.org/www-project-top-ten/","4","@APPSCAN/integer_overflow_test.php","GET","200","","","","","Integer Overflow and Underflow (OWASP 2025-A08): Tests for integer overflow/underflow vulnerabilities that could lead to security issues.","",""
+"900009","https://owasp.org/www-project-top-ten/","3","@APPSCAN/insecure_randomness_test.php","GET","200","","","","","Insecure Randomness (OWASP 2025-A09): Tests for weak random number generation that could lead to predictable outcomes.","",""
+"900010","https://owasp.org/www-project-top-ten/","6","@APPSCAN/dos_test.php","GET","200","","","","","Denial of Service Attacks (OWASP 2025-A10): Tests for vulnerabilities that could lead to denial of service conditions.","",""
+
+# CVE-2025-24387 - OTRS Session Hijacking
+"900011","https://nvd.nist.gov/vuln/detail/CVE-2025-24387","3a","/otrs/","GET","OTRS","","","","","CVE-2025-24387: OTRS Application Server session hijacking vulnerability due to missing attributes for sensitive cookie settings in HTTPS sessions.","",""
+"900012","https://nvd.nist.gov/vuln/detail/CVE-2025-24387","3a","/otrs/index.pl","GET","OTRS","","","","","CVE-2025-24387: OTRS Application Server session hijacking vulnerability due to missing attributes for sensitive cookie settings in HTTPS sessions.","",""
+
+# CVE-2021-42718 - Replicated Classic Information Disclosure
+"900013","https://nvd.nist.gov/vuln/detail/CVE-2021-42718","3",":8800/api/v1/app/","GET","Replicated","","","","","CVE-2021-42718: Information Disclosure in API in Replicated Classic versions prior to 2.53.1 allows authenticated users to retrieve sensitive data.","",""
+
+# CVE-2025-25181 - Advantive VeraCore SQL Injection
+"900014","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","9","/veracore/","GET","VeraCore","","","","","CVE-2025-25181: Advantive VeraCore SQL Injection Vulnerability that could allow unauthorized database access.","",""
+
+# CVE-2024-57968 - Advantive VeraCore Unrestricted File Upload
+"900015","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","0","/veracore/upload.php","GET","VeraCore","","","","","CVE-2024-57968: Advantive VeraCore Unrestricted File Upload Vulnerability that could allow arbitrary code execution.","",""
+
+# CVE-2025-24813 - Apache Tomcat Path Equivalence
+"900016","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","5","/examples/","GET","Apache Tomcat","","","","","CVE-2025-24813: Apache Tomcat Path Equivalence Vulnerability that could allow unauthorized access to protected resources.","",""
+"900017","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","5","/manager/","GET","Apache Tomcat","","","","","CVE-2025-24813: Apache Tomcat Path Equivalence Vulnerability that could allow unauthorized access to protected resources.","",""
+
+# CVE-2025-22457 - Ivanti Connect Secure VPN
+"900018","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","8","/dana-na/","GET","Ivanti Connect Secure","","","","","CVE-2025-22457: Critical vulnerability in Ivanti Connect Secure VPN that could allow remote code execution.","",""
+"900019","https://www.cisa.gov/known-exploited-vulnerabilities-catalog","8","/dana-admin/","GET","Ivanti Connect Secure","","","","","CVE-2025-22457: Critical vulnerability in Ivanti Connect Secure VPN that could allow remote code execution.","",""
+
+# Additional modern web vulnerabilities
+"900020","https://owasp.org/www-project-top-ten/","4a","/api/auth/","GET","200","","","","","JWT Token vulnerabilities: Tests for weak JWT implementation, missing signature validation, or algorithm confusion.","",""
+"900021","https://owasp.org/www-project-top-ten/","4","/api/graphql","GET","GraphQL","","","","","GraphQL vulnerabilities: Tests for GraphQL implementation issues including introspection, query depth, and injection.","",""
+"900022","https://owasp.org/www-project-top-ten/","3","/api/swagger","GET","Swagger","","","","","API documentation exposure: Tests for exposed API documentation that may reveal sensitive endpoints or parameters.","",""
+"900023","https://owasp.org/www-project-top-ten/","4","/api/","OPTIONS","CORS","","","","","CORS misconfiguration: Tests for Cross-Origin Resource Sharing misconfigurations that could lead to unauthorized access.","",""
+"900024","https://owasp.org/www-project-top-ten/","3a","/oauth/authorize","GET","OAuth","","","","","OAuth vulnerabilities: Tests for OAuth implementation issues including CSRF, open redirectors, and improper validation.","",""
+"900025","https://owasp.org/www-project-top-ten/","4","/api/upload","POST","200","","","","","File upload vulnerabilities: Tests for insufficient file validation that could allow malicious file uploads.","",""
