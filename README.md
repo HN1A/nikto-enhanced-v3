@@ -15,7 +15,7 @@ Nikto Enhanced v3 is a comprehensive web server scanner that performs comprehens
 ## Installation
 Extract the archive and run the scanner directly:
 ```
-https://github.com/HN1A/nikto-enhanced-v3.git
+git clone https://github.com/HN1A/nikto-enhanced-v3.git
 cd nikto-enhanced-v3
 chmod +x nikto_enhanced.pl
 ./nikto_enhanced.pl -h target.com
